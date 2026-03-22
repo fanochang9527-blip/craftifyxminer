@@ -19,7 +19,9 @@ secrets.yml
 *.xlsx
 *.xls
 *.tsv
-data/
+data/*
+!data/.gitkeep
+!data/README.md
 exports/
 merged_creators.*
 seed_data/
