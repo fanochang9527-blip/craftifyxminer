@@ -1,0 +1,32 @@
+# Apify Actor 配置
+# Actor ID 和参数模板，handles 由代码动态填入
+
+following_actor:
+  actor_id: "apidojo/twitter-scraper-v2"
+  input:
+    action: "following"
+    handles: []
+    max_items: 500
+    proxy:
+      useApifyProxy: true
+      apifyProxyGroups: ["DATACENTER"]
+
+profile_actor:
+  actor_id: "apidojo/tweet-scraper"
+  input:
+    handles: []
+    maxTweets: 10
+    includeReplies: false
+    proxy:
+      useApifyProxy: true
+      apifyProxyGroups: ["RESIDENTIAL"]
+
+followers_actor:
+  actor_id: "apidojo/twitter-scraper-v2"
+  input:
+    action: "followers"
+    handles: []
+    max_items: 1000
+    proxy:
+      useApifyProxy: true
+      apifyProxyGroups: ["DATACENTER"]

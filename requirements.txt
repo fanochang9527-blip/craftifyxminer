@@ -1,0 +1,35 @@
+# CraftifyX Miner 6.0 — Python 依赖
+# 安装: pip install -r requirements.txt
+
+# Web 框架
+flask==3.1.*
+gunicorn==23.*
+
+# 异步 HTTP
+aiohttp==3.11.*
+httpx==0.28.*
+
+# 数据库
+asyncpg==0.30.*
+psycopg2-binary==2.9.*
+sqlalchemy==2.0.*
+
+# LLM (统一 OpenAI 兼容接口)
+openai==1.66.*
+
+# Apify
+apify-client==1.8.*
+
+# Dashboard
+streamlit==1.41.*
+plotly==6.0.*
+
+# 数据处理
+pandas==2.2.*
+
+# 配置
+pyyaml==6.0.*
+python-dotenv==1.0.*
+
+# 定时任务
+apscheduler==3.10.*

@@ -1,0 +1,113 @@
+# ===========================
+# 秘钥与环境变量 (最重要!)
+# ===========================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+credentials.json
+secrets.yaml
+secrets.yml
+
+# ===========================
+# 敏感业务数据
+# ===========================
+*.csv
+*.xlsx
+*.xls
+*.tsv
+data/
+exports/
+merged_creators.*
+seed_data/
+**/twitter_handles*
+**/handles*
+**/seed_list*
+
+# ===========================
+# 二进制文档 (可能含敏感业务数据)
+# ===========================
+*.docx
+*.pdf
+*.doc
+*.pptx
+*.ppt
+
+# ===========================
+# 模型文件 (可能含训练数据)
+# ===========================
+*.pkl
+*.pickle
+*.joblib
+*.h5
+*.pt
+*.pth
+*.onnx
+models/*.json
+!models/.gitkeep
+
+# ===========================
+# Python
+# ===========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+eggs/
+*.egg
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+.venv/
+venv/
+ENV/
+env/
+
+# ===========================
+# IDE / 编辑器
+# ===========================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ===========================
+# Docker
+# ===========================
+pgdata/
+certbot/
+
+# ===========================
+# 日志与临时文件
+# ===========================
+*.log
+logs/
+tmp/
+temp/
+.cache/
+
+# ===========================
+# Streamlit
+# ===========================
+.streamlit/secrets.toml
+
+# ===========================
+# Jupyter
+# ===========================
+.ipynb_checkpoints/
+
+# ===========================
+# 测试覆盖
+# ===========================
+htmlcov/
+.coverage
+.pytest_cache/

@@ -1,0 +1,122 @@
+# BIO 知识库 — Level 1/2 规则快筛
+# 基于数百名已验证创作者的 BIO 特征提取
+# Level 1: Link DNA 指纹 (出现即 95%+ 为创作者)
+# Level 2: 语义矩阵 (身份/动作/工具关键词 + Emoji 信号)
+
+# === Level 1: Link DNA 指纹 ===
+link_dna:
+  high_confidence:
+    - "linktr.ee"
+    - "linktree.com"
+    - "carrd.co"
+    - "carrd.me"
+    - "artstation.com"
+    - "pixiv.net"
+    - "pixiv.me"
+    - "booth.pm"
+    - "vgen.co"
+    - "vgen.ai"
+    - "toyhou.se"
+    - "deviantart.com"
+    - "etsy.com/shop"
+    - "gumroad.com"
+    - "ko-fi.com"
+    - "patreon.com"
+  medium_confidence:
+    - "twitch.tv"
+    - "youtube.com/@"
+    - "instagram.com/"
+
+# === Level 2: 语义矩阵 ===
+semantic_matrix:
+  identity_keywords:
+    en:
+      - "illustrator"
+      - "artist"
+      - "artisan"
+      - "character designer"
+      - "character creator"
+      - "fanartist"
+      - "plush artist"
+      - "doll maker"
+      - "game dev"
+      - "indie dev"
+      - "vtuber designer"
+    ja:
+      - "絵師"
+      - "イラストレーター"
+    zh:
+      - "画师"
+      - "插画师"
+      - "原画师"
+      - "概念艺术家"
+      - "角色设计师"
+      - "毛绒设计师"
+      - "同人艺术家"
+      - "独立游戏画师"
+
+  action_keywords:
+    en:
+      - "commission open"
+      - "comm open"
+      - "preorder"
+      - "pre-order"
+      - "shop now"
+      - "new drop"
+      - "merch"
+    zh:
+      - "接稿"
+      - "开预售"
+      - "众筹"
+      - "贩售"
+      - "定制"
+      - "商品化"
+
+  weak_signals:
+    - "OC"
+    - "original character"
+    - "fanart"
+    - "doujin"
+    - "VTuber"
+    - "Repost OK"
+    - "RT OK"
+    - "shop"
+    - "store"
+    - "work"
+
+  tool_keywords:
+    - "Procreate"
+    - "Clip Studio"
+    - "CSP"
+    - "Photoshop"
+    - "Blender"
+    - "Live2D"
+    - "Wacom"
+    - "SAI"
+
+# === Emoji 信号 ===
+emoji_signals:
+  creative:  ["🎨", "🖌️", "✍️", "📝"]
+  character: ["🐰", "🦊", "🐱", "🐻", "🌸", "✨", "⭐"]
+  commerce:  ["🛍️", "💰", "🛒", "📦"]
+  craft:     ["🔨", "🛠️"]
+
+# === 误杀防范 ===
+false_positive_rules:
+  fan_account_signals:
+    - "fan account"
+    - "fan page"
+    - "stan account"
+  studio_signals:
+    - "team"
+    - "studio"
+    - "agency"
+    - " we "
+
+# === 创作者类型分类 (用于 SPS 权重选择) ===
+type_classification:
+  oc_creator:      ["OC", "original character", "my OC", "OC art"]
+  vtuber:          ["VTuber", "virtual youtuber", "虚拟主播", "Live2D"]
+  fan_artist:      ["fanart", "doujin", "二次创作", "同人"]
+  game_creator:    ["indie game", "game dev", "indie studio"]
+  content_creator: ["art blog", "daily art", "sketchbook"]
