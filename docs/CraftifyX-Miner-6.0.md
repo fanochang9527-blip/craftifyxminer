@@ -289,7 +289,7 @@ def calculate_centrality_tier(username):
 | Posting Score | 勤勉 | 月发帖数 / 30 × 100 |
 | Monetization Score | 变现 | Bio 关键词：商店 90 / 接单 60 / 无 0 |
 | Growth Score | 增速 | 月环比粉丝增长 |
-| Fan Creator Ratio | 圈层 | 粉丝中创作者占比 × 100 |
+| Circle Influence Score（圈层影响力） | 被 Seed 认可程度 | 与 `creator_scores.seed_connections` 同源：统计有多少个 `is_seed=true` 的账号在 `creator_graph` 中关注该创作者；归一化 `min(100, seed_connections × 20)`（5 个及以上 Seed 关注 → 100，与 Hub 阈值对齐） |
 | Character Consistency | IP 化 | pHash 最大聚类 / 总图片 × 100 |
 | Community Score | 社区 | (mentions×2 + fanart×5) / 标准化 |
 | Data Confidence | 置信 | 账号年龄×0.6 + 完整度×0.4 |
@@ -328,7 +328,7 @@ def calculate_centrality_tier(username):
 |------|------|----------------------|
 | **creators** | 创作者档案 | username, followers, bio, website, is_seed, seed_tier, total_sales, discovered_via, anchor_seed, bd_status |
 | **tweets** | 推文数据 | tweet_id, likes, retweets, replies, views, text, media_urls, interaction_data (JSONB) |
-| **creator_features** | 10 维指标 | audience_score, engagement_score, virality_score, growth_score, posting_score, monetization_score, fan_creator_ratio, character_consistency, community_score, data_confidence |
+| **creator_features** | 10 维指标 | audience_score, engagement_score, virality_score, growth_score, posting_score, monetization_score, circle_influence_score, character_consistency, community_score, data_confidence |
 | **creator_graph** | 关系图谱 | creator_id, connected_creator_id, connection_type, weight |
 | **creator_scores** | SPS + 中心度等 | creator_type, sps_score, confidence, centrality_tier, seed_connections, contact_probability, predicted_response_rate |
 | **sales_feedback** | 进化核心 | sku_id, gmv, units_sold, launch_date, conversion_rate, bd_contact_id, days_to_close |

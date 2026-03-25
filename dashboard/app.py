@@ -1,8 +1,26 @@
 """Streamlit BD Dashboard 主入口。"""
 
-# TODO: 实现 Streamlit Dashboard
-# 4 个页面:
-# 1. 每日发现报告 (pages/1_daily_report.py)
-# 2. 候选人浏览与 BD 判定 (pages/2_candidates.py)
-# 3. 联系追踪与销售反馈 (pages/3_outreach.py)
-# 4. 成本监控 (pages/4_cost_monitor.py)
+import streamlit as st
+
+st.set_page_config(
+    page_title="CraftifyX Miner",
+    page_icon="⛏️",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+st.sidebar.title("CraftifyX Miner 7.0")
+st.sidebar.markdown("---")
+
+st.title("CraftifyX Miner Dashboard")
+st.markdown(
+    """
+    欢迎使用 CraftifyX Miner 7.0 BD Dashboard。
+
+    **导航页面** (侧边栏):
+    - **Daily Report** — 每日发现报告
+    - **Candidates** — 候选人浏览与 BD 判定
+    - **Outreach** — 联系追踪与销售反馈
+    - **Cost Monitor** — 成本监控面板
+    """
+)

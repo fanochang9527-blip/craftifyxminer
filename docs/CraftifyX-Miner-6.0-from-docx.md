@@ -215,7 +215,7 @@ class FeatureCalculationPipeline:
                 'posting_score': calculate_posting(creator['tweets']),
                 'monetization_score': calculate_monetization(creator['bio']),
                 'growth_score': calculate_growth(creator),
-                'fan_creator_ratio': calculate_fan_ratio(creator['followers_sample']),
+                'circle_influence_score': calculate_circle_influence(creator['username']),
                 'character_consistency': calculate_character_phash(creator['tweets']),
                 'community_score': calculate_community(creator['tweets']),
                 'data_confidence': calculate_confidence(creator)
@@ -350,7 +350,7 @@ def monthly_sps_calibration():
             
         model = XGBRegressor().fit(
             type_data[['audience_score', 'engagement_score', 'virality_score', 
-                      'character_consistency', 'monetization_score', 'fan_creator_ratio']],
+                      'character_consistency', 'monetization_score', 'circle_influence_score']],
             type_data['gmv']
         )
         
@@ -442,7 +442,7 @@ CREATE TABLE creator_features (
     growth_score FLOAT,
     posting_score FLOAT,
     monetization_score FLOAT,
-    fan_creator_ratio FLOAT,
+    circle_influence_score FLOAT,  -- 圈层影响力（Miner 7.0）：由被 Seed 关注数归一化，见下 Phase 4
     character_consistency FLOAT,
     community_score FLOAT,
     data_confidence FLOAT

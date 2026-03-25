@@ -1,9 +1,12 @@
 """全局配置 — 从环境变量加载，敏感值不写入代码。"""
 
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 # --- 数据库 ---
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://miner:password@localhost:5432/craftifyx_miner")
@@ -16,6 +19,8 @@ APIFY_WEBHOOK_SECRET = os.getenv("APIFY_WEBHOOK_SECRET", "")
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "dashscope")
 LLM_MODEL = os.getenv("LLM_MODEL", "qwen3.5-plus")
 LLM_BATCH_SIZE = int(os.getenv("LLM_BATCH_SIZE", "50"))
+LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.1"))
+LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "2000"))
 
 PROVIDER_CONFIGS = {
     "dashscope": {
@@ -40,7 +45,16 @@ PROVIDER_CONFIGS = {
     },
 }
 
-FALLBACK_CHAIN = ["dashscope", "moonshot", "deepseek", "zhipu", "minimax"]
+FALLBACK_CHAIN = ["moonshot", "dashscope", "deepseek", "zhipu", "minimax"]
+
+# --- LLM provider-specific model overrides ---
+PROVIDER_MODELS = {
+    "moonshot": os.getenv("MOONSHOT_MODEL", "kimi-k2.5"),
+    "dashscope": os.getenv("DASHSCOPE_MODEL", "qwen3.5-plus"),
+    "deepseek": os.getenv("DEEPSEEK_MODEL", "deepseek-v3.2"),
+    "zhipu": os.getenv("ZHIPU_MODEL", "glm-4-flash"),
+    "minimax": os.getenv("MINIMAX_MODEL", "MiniMax-Text-01"),
+}
 
 # --- Flask ---
 FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "dev-only-change-in-production")
@@ -50,6 +64,7 @@ FLASK_PORT = int(os.getenv("FLASK_PORT", "5000"))
 STREAMLIT_PORT = int(os.getenv("STREAMLIT_PORT", "8501"))
 
 # --- 成本控制 ---
+MONTHLY_BUDGET_USD = float(os.getenv("MONTHLY_BUDGET_USD", "500"))
 DAILY_APIFY_BUDGET_USD = float(os.getenv("DAILY_APIFY_BUDGET_USD", "20"))
 MONTHLY_LLM_BUDGET_USD = float(os.getenv("MONTHLY_LLM_BUDGET_USD", "10"))
 
@@ -57,3 +72,8 @@ MONTHLY_LLM_BUDGET_USD = float(os.getenv("MONTHLY_LLM_BUDGET_USD", "10"))
 EXPLORATION_RATIO = float(os.getenv("EXPLORATION_RATIO", "0.20"))
 DAILY_ANCHOR_COUNT = int(os.getenv("DAILY_ANCHOR_COUNT", "20"))
 MAX_FOLLOWING_PER_ANCHOR = int(os.getenv("MAX_FOLLOWING_PER_ANCHOR", "500"))
+
+# --- 路径 ---
+BIO_RULES_PATH = PROJECT_ROOT / "config" / "bio_rules.yaml"
+WEIGHTS_PATH = PROJECT_ROOT / "config" / "weights.yaml"
+APIFY_CONFIG_PATH = PROJECT_ROOT / "config" / "apify_config.yaml"

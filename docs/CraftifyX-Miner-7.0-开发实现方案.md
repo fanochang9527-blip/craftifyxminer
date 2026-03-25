@@ -1,16 +1,12 @@
-# CraftifyX Miner 6.0 国产模型版 -- 完整开发实现方案（归档）
+# CraftifyX Miner 7.0 — 完整开发实现方案（国产模型版）
 
-> **说明**：**当前主版本为 [CraftifyX-Miner-7.0-开发实现方案.md](./CraftifyX-Miner-7.0-开发实现方案.md)**。下文保留 v1.0 工程细节全文；**与 7.0 冲突时以 7.0 文档 + 仓库 `db/schema.sql` 为准**。
-
----
-
-# CraftifyX Miner 6.0 国产模型版 -- 完整开发实现方案（原文 v1.0）
-
-> **版本**：v1.0（2026-03-22）  
+> **版本**：v7.0（2026-03-24）  
+> **与 6.0 关系**：本方案在 **Miner 6.0** 的工程设计上迭代，**不推翻重来**：三级数据采集管道、Webhook、`bio_rules` + `ai_filter`、10 维 + SPS、`weights.yaml`、Streamlit 等保持一致；**7.0 增量**主要为：**圈层影响力字段 `circle_influence_score`**（替代 `fan_creator_ratio`）、**BIO 四级产品叙事与可选误杀复盘表**、文档与验收口径统一。  
 > **状态**：待确认启动  
-> **技术栈**：Python (Flask/aiohttp) + Apify + 国产大模型 (Qwen/DeepSeek 优先) + PostgreSQL + Streamlit  
-> **交付周期**：4 周  
-> **月度预算**：≤$500
+> **技术栈**：Python (Flask/aiohttp) + Apify + 国产大模型 (Qwen/DeepSeek/Kimi 等) + PostgreSQL + Streamlit  
+> **交付周期**：4 周（MVP）；完整 Multi-hop / 误杀 Few-shot 可列 v1.1  
+> **月度预算**：≤$500  
+> **决策向说明书**：[CraftifyX-Miner-7.0-项目说明书.md](./CraftifyX-Miner-7.0-项目说明书.md)
 
 ---
 
@@ -29,6 +25,7 @@
 | W4-1 | 实现 Streamlit Dashboard 4 页面 (日报/候选人/联系追踪/成本监控) | Week 4 | 待启动 |
 | W4-2 | 定时任务编排 (cron/daily_job.py) + docker-compose.yml + 部署上线 | Week 4 | 待启动 |
 | W4-3 | 飞轮进化简化版 (pipeline/evolution.py, Seed 晋升逻辑) + 联调测试 | Week 4 | 待启动 |
+| W4-4 (可选) | 误杀复盘库: `db/migrations` 增加 `missed_gems_library` 表；Dashboard「标记误杀」+ 周更 Few-shot 注入 `ai_filter`（可与 v1.1 合并） | Week 4 或 v1.1 | 待启动 |
 
 ---
 
@@ -122,10 +119,12 @@ graph TB
         Dashboard --> CostPanel
     end
 
-    subgraph Evolution["进化层 (简化版)"]
+    subgraph Evolution["进化层 (7.0: 双轨 + 可选误杀)"]
         SalesFB["Sales Feedback 录入"]
         SeedPromotion["Seed 晋升\nGMV > $1000"]
+        MissedGems["可选: Missed Gems\n→ Few-shot 注入 ai_filter"]
         BDFlow --> SalesFB
+        BDFlow -.-> MissedGems
         SalesFB --> SeedPromotion
         SeedPromotion --> SeedDB
     end
@@ -275,18 +274,18 @@ MONTHLY_LLM_BUDGET_USD=10
 
 ---
 
-## 四、数据库设计 -- 6+1 张核心表
+## 四、数据库设计 -- 9 张核心表 + 7.0 可选表
 
-完整 SQL 将写入 `db/schema.sql`，核心设计要点:
+完整 SQL 写入 `db/schema.sql`，核心设计要点:
 
 - `creators` 表增加 `discovery_strategy` 字段 (区分常规/地域探索/标签探索/时间探索)
-- `creator_features` 用 UNIQUE(creator_id) 约束保证一对一最新快照
-- `creator_graph` 添加复合索引 `(connected_creator_id, creator_id)` 支撑中心度查询
+- `creator_features` 用 UNIQUE(creator_id) 约束保证一对一最新快照；**第 7 维为 `circle_influence_score`（圈层影响力，Miner 7.0），已替代 `fan_creator_ratio`**
+- `creator_graph` 添加复合索引 `(connected_creator_id, creator_id)` 支撑中心度与 `seed_connections` 查询
+- `creator_scores` 含 `seed_connections`、`centrality_tier`，与 `circle_influence_score` 同源
 - `outreach_log` 和 `sales_feedback` 通过 `creator_id` 外键关联
-- 新增 `cost_tracking` 表记录每日 Apify CU、LLM tokens、代理流量费用
-- 新增 `discovery_batches` 表记录每次发现批次的元数据 (批次 ID、锚点列表、探索比例、产出数量)
+- `cost_tracking`、`discovery_batches` 见下
 
-表结构基于文档 [docs/CraftifyX-Miner-6.0-from-docx.md](CraftifyX-Miner-6.0-from-docx.md) 第 389-503 行的 Schema，额外增加:
+表结构以仓库 `db/schema.sql` 为准；以下为历史文档中「额外增加」的片段，**与当前 schema 合并理解即可**:
 
 ```sql
 -- 8. cost_tracking (成本监控)
@@ -317,6 +316,35 @@ CREATE TABLE discovery_batches (
     created_at TIMESTAMP DEFAULT NOW()
 );
 ```
+
+**Miner 7.0 可选（误杀复盘，W4-4 / v1.1）**：
+
+```sql
+-- 可选第 10 张表：与 MVP 9 表独立迁移，避免阻塞首期上线
+CREATE TABLE IF NOT EXISTS missed_gems_library (
+    id SERIAL PRIMARY KEY,
+    bio_text TEXT NOT NULL,
+    rejection_reason VARCHAR(200),
+    actual_type VARCHAR(50),
+    gmv_generated FLOAT,
+    added_by VARCHAR(80),
+    used_in_training BOOLEAN DEFAULT false,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+---
+
+### BIO：产品「四级」与工程「Level 1/2/3」的对应关系
+
+| 产品叙事（7.0 对外） | 工程实现 |
+|---------------------|----------|
+| Level A：硬规则 / Link DNA | `bio_rules.yaml` 中 `link_dna` + 规则引擎优先匹配 |
+| Level B：语义矩阵 | `semantic_matrix` + Emoji |
+| Level C：LLM | `ai_filter.py` 批量灰区 |
+| Level D：误杀复盘 | `missed_gems_library` + Prompt 周更（可选） |
+
+工程上仍称 **Level 1/2 = 规则快筛、Level 3 = LLM**，与说明书「三级管道（L1/L2/L3 采集）」不是同一概念。
 
 ---
 
@@ -765,9 +793,10 @@ oc_creator:
 
 - **Page 2: 候选人浏览与 BD 判定** (`2_candidates.py`)
   - 筛选器: 中心度层级、SPS 范围、创作者类型、发现策略
-  - 候选人卡片: 头像占位 + @username (外链 X 主页) + 中心度标签 + SPS 分数 + 创作者类型 + 10 维雷达图
+  - 候选人卡片: 头像占位 + @username (外链 X 主页) + 中心度标签 + SPS 分数 + 创作者类型 + 10 维雷达图（**第 7 维：circle_influence_score**）
   - 关键信号: has_merch_experience、Virality 倍数、发现来源
   - 操作按钮: Interested / Rejected / Deferred + 备注输入
+  - **7.0 可选**: 「标记误杀」→ 写入 `missed_gems_library`（与 W4-4 联动）
   - 操作结果写入 `creators.bd_decision` 和 `creators.bd_decision_note`
 
 - **Page 3: 联系追踪与销售反馈** (`3_outreach.py`)

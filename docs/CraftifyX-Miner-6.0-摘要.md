@@ -80,7 +80,7 @@
 | Posting | 勤勉 | 月发帖数/30×100 |
 | Monetization | 变现 | Bio 关键词：商店 90 / 接单 60 / 无 0 |
 | Growth | 增速 | 月环比粉丝增长 |
-| Fan Creator Ratio | 圈层 | 粉丝中创作者占比×100 |
+| Circle Influence Score | 圈层影响力（Miner 7.0） | 被多少个 Seed 关注（`seed_connections`）归一化到 0–100，如 `min(100, seed_connections×20)` |
 | Character Consistency | IP 化 | pHash 最大聚类/总图片×100 |
 | Community | 社区 | `(mentions×2+fanart×5)` 标准化 |
 | Data Confidence | 置信 | 账号年龄×0.6 + 完整度×0.4 |

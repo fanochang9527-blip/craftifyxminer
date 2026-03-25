@@ -8,7 +8,7 @@ oc_creator:
   posting: 0.05
   monetization: 0.20
   growth: 0.05
-  fan_creator_ratio: 0.05
+  circle_influence_score: 0.05
   character_consistency: 0.20
   community: 0.05
   data_confidence: 0.05
@@ -20,7 +20,7 @@ vtuber:
   posting: 0.10
   monetization: 0.10
   growth: 0.10
-  fan_creator_ratio: 0.05
+  circle_influence_score: 0.05
   character_consistency: 0.05
   community: 0.05
   data_confidence: 0.05
@@ -32,7 +32,7 @@ fan_artist:
   posting: 0.10
   monetization: 0.15
   growth: 0.05
-  fan_creator_ratio: 0.10
+  circle_influence_score: 0.10
   character_consistency: 0.05
   community: 0.10
   data_confidence: 0.05
@@ -44,7 +44,7 @@ game_creator:
   posting: 0.05
   monetization: 0.20
   growth: 0.10
-  fan_creator_ratio: 0.05
+  circle_influence_score: 0.05
   character_consistency: 0.10
   community: 0.10
   data_confidence: 0.05
@@ -56,7 +56,7 @@ content_creator:
   posting: 0.15
   monetization: 0.10
   growth: 0.10
-  fan_creator_ratio: 0.05
+  circle_influence_score: 0.05
   character_consistency: 0.05
   community: 0.10
   data_confidence: 0.05

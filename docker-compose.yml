@@ -5,6 +5,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./db/indexes.sql:/docker-entrypoint-initdb.d/02-indexes.sql
     environment:
       POSTGRES_DB: craftifyx_miner
       POSTGRES_USER: miner
