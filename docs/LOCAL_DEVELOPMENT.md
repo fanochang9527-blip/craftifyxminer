@@ -4,6 +4,25 @@
 
 ---
 
+## 流程概览（从零到可测）
+
+1. 克隆仓库 → 创建并激活 Python venv → `pip install -r requirements.txt`
+2. 复制 `.env`，执行 `docker compose up -d db`，等待 `db` 为 `healthy`
+3.（按需）在 `.env` 填写 Apify、百炼等密钥
+4. `pytest tests/` 跑通单元测试
+5. 准备小样本 CSV，执行 `python -m pipeline.seed_import --csv ...`
+6.（按需）插入 `tweets` → 跑特征与 SPS，让 Dashboard 的 Candidates 等有数据
+7. 本机启动 `python -m server.app` 与 `streamlit run dashboard/app.py ...`，浏览器验证
+
+**Compose 两种用法**：
+
+| 方式 | 命令 | 适用场景 |
+|------|------|----------|
+| **仅数据库（推荐本地调试）** | `docker compose up -d db` | 本机 Python 跑 Flask / Streamlit，便于断点与改代码即生效 |
+| **全栈容器** | `docker compose up -d` | 起 `db`、`server`、`dashboard`、`cron`；会占用 5000、8501 等端口，与「本机起 Flask/Streamlit」二选一 |
+
+---
+
 ## 一、环境要求
 
 | 项目 | 说明 |
@@ -12,13 +31,14 @@
 | Python | 3.11+ |
 | Docker Desktop | 用于运行 PostgreSQL 容器 |
 | Git | 克隆与管理代码 |
+| 本机端口 | 默认映射 **5432**；若已被占用，见下文 **3.0 端口冲突** |
 
 ---
 
 ## 二、获取代码与 Python 虚拟环境
 
 ```bash
-cd /path/to/craftifyxminer
+cd /path/to/craftifyxminer   # 换成你本机克隆路径，例如 ~/Documents/GitHub/craftifyxminer
 
 python3 -m venv venv
 # macOS / Linux:
@@ -42,7 +62,18 @@ pip install -r requirements.txt
 
 - 使用镜像 `postgres:15-alpine`
 - 将 [db/schema.sql](../db/schema.sql) 与 [db/indexes.sql](../db/indexes.sql) 挂载到 `docker-entrypoint-initdb.d`，**仅在数据卷首次初始化时**自动执行建表与索引
-- 映射本机端口 `5432`
+- 默认映射本机端口 `5432`
+
+### 3.0 端口冲突（可选）
+
+若本机 **5432** 已被占用，可改 [docker-compose.yml](../docker-compose.yml) 中 `db` 的 `ports`，例如改为宿主机 `5433`：
+
+```yaml
+ports:
+  - "5433:5432"
+```
+
+同时把 `.env` 里的 `DATABASE_URL` 主机端口改为 `5433`（例：`postgresql://miner:密码@localhost:5433/craftifyx_miner`）。改完后如容器已在跑，需 `docker compose up -d db` 重新创建端口映射。
 
 ### 3.1 准备 `.env`
 
@@ -58,6 +89,8 @@ DB_PASSWORD=your_local_strong_password
 # 必须与上面密码一致，且用户/库名与 compose 一致
 DATABASE_URL=postgresql://miner:your_local_strong_password@localhost:5432/craftifyx_miner
 ```
+
+Docker Compose 会在**项目根目录**自动读取 `.env`，用其中的 `DB_PASSWORD` 替换 compose 里的 `${DB_PASSWORD}`，供 `db` 容器使用。应用代码侧则由 [config/settings.py](../config/settings.py) 在导入时 `load_dotenv()` 加载同一 `.env`。
 
 ### 3.2 仅启动数据库容器
 
@@ -103,7 +136,18 @@ psql "postgresql://miner:your_local_strong_password@localhost:5432/craftifyx_min
 
 ## 四、配置其余 API（本地测试最小集）
 
-在 `.env` 中继续填写（测试「导入 + Dashboard + 部分管道」时，**可先不填 Apify**，仅测规则与单元测试；要测 **LLM 过滤** 则必须配置百炼或其一）：
+完整模板见 [.env.example](../.env.example)。按你要测的功能填写即可：
+
+| 场景 | 建议 |
+|------|------|
+| 仅 `pytest` + 规则/特征/SPS 单测 | 可不填真实 Apify、百炼；`tests/test_ai_filter.py` 使用 **unittest.mock**，一般**不需要**真实 LLM Key 即可通过 |
+| 真实调用 **LLM Bio 过滤** | 配置 `DASHSCOPE_API_KEY`（或 `.env.example` 中其他 provider），并设置 `LLM_PROVIDER` / `LLM_MODEL` |
+| 真实 **Apify 抓取** | 配置 `APIFY_API_TOKEN`、`APIFY_WEBHOOK_SECRET` |
+| Flask / Streamlit | `FLASK_SECRET_KEY`、端口变量等 |
+
+环境变量由 [config/settings.py](../config/settings.py) 的 `load_dotenv()` 从项目根 `.env` 加载；不要在代码里硬编码密钥。
+
+在 `.env` 中继续填写示例（测试「导入 + Dashboard + 部分管道」时，**可先不填 Apify**；要测 **真实 LLM 过滤** 则必须配置百炼或其一）：
 
 ```env
 # --- Apify（真实跑抓取时再填；仅 pytest/规则筛选用不到）---
@@ -138,7 +182,7 @@ MONTHLY_LLM_BUDGET_USD=10
 pytest tests/ -v
 ```
 
-期望：全部通过。若某条依赖网络或真实 Key，先检查 `.env` 是否加载（`python-dotenv` 会在导入 `config.settings` 时加载）。
+期望：全部通过。`tests/test_ai_filter.py` 对 LLM 调用做了 mock，**通常不依赖外网或真实 Key**。若个别用例失败，先确认已在仓库根目录执行、venv 已安装 [requirements.txt](../requirements.txt)，且未误删测试依赖。
 
 仅跑快速子集：
 
@@ -152,7 +196,7 @@ pytest tests/test_bio_rule_filter.py tests/test_feature_engine.py tests/test_sps
 
 ### 6.1 新建文件 `data/sample_seeds.csv`（可放在任意路径，下面用相对路径示例）
 
-CSV **至少包含列** `username`；建议包含 `total_sales` 及可选字段以便测试展示。
+CSV **至少包含列** `username`。可选列与 [pipeline/seed_import.py](../pipeline/seed_import.py) 一致：`total_sales`、`bio`、`website`、`followers`、`following`、`tweets_count`、`has_merch_experience`（缺省 `total_sales` 时按 0 处理）。建议带 `total_sales` 以便验证 Tier 展示。
 
 示例内容：
 
@@ -318,7 +362,9 @@ streamlit run dashboard/app.py --server.port 8501 --server.address 127.0.0.1
 | 文件 | 说明 |
 |------|------|
 | [.env.example](../.env.example) | 环境变量模板 |
-| [docker-compose.yml](../docker-compose.yml) | 含 `db` 服务定义 |
+| [config/settings.py](../config/settings.py) | 从 `.env` 加载配置（`load_dotenv`） |
+| [docker-compose.yml](../docker-compose.yml) | 含 `db`、`server`、`dashboard`、`cron` 定义 |
 | [db/schema.sql](../db/schema.sql) | 表结构 |
 | [db/indexes.sql](../db/indexes.sql) | 索引 |
-| [pipeline/seed_import.py](../pipeline/seed_import.py) | 种子导入 |
+| [pipeline/seed_import.py](../pipeline/seed_import.py) | 种子 CSV 导入 |
+| [tests/](../tests/) | pytest 用例（含 `test_ai_filter` 等） |
