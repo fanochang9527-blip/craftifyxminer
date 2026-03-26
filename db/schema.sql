@@ -1,6 +1,6 @@
 -- CraftifyX Miner 6.0 / 7.0 对齐 — 数据库 Schema (9 张核心表)
 -- creator_features 第 7 维：圈层影响力 circle_influence_score（Miner 7.0），已替代旧版 fan_creator_ratio（粉丝抽样占比）。
--- 执行: psql -U miner -d craftifyx_miner -f db/schema.sql
+-- 执行（库名/用户以 .env 为准，默认）: psql -U miner -d craftifyx_miner -f db/schema.sql
 
 -- 1. creators (主档案)
 CREATE TABLE IF NOT EXISTS creators (

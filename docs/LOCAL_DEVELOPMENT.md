@@ -33,6 +33,22 @@
 | Git | 克隆与管理代码 |
 | 本机端口 | 默认映射 **5432**；若已被占用，见下文 **3.0 端口冲突** |
 
+### 数据库命名约定
+
+全项目（本地 Docker、本机 `psql`、阿里云 RDS 等）建议统一如下，**避免连接串与实例实际库名不一致**。
+
+| 项 | 正式名称 | 说明 |
+|----|----------|------|
+| **PostgreSQL 逻辑库名** | `craftifyx_miner` | 小写 + 下划线；与仓库目录名 `craftifyxminer` 对应，便于识别 |
+| **数据库用户（应用连接用户）** | `miner` | Docker 官方镜像初始化用户；云上可在 RDS 建同名用户或使用厂商提供的账号，但 **`DATABASE_URL` 中的用户名必须与实际可连库用户一致** |
+| **单一配置源** | `.env` | `POSTGRES_DB`、`POSTGRES_USER` 供 [docker-compose.yml](../docker-compose.yml) 的 `db` 服务使用；`DATABASE_URL` 中的**库名段、用户段、密码**须与上述及 `DB_PASSWORD` 一致 |
+
+**修改库名或用户时**：
+
+1. 同步改 `.env` 里 `POSTGRES_DB`、`POSTGRES_USER`、`DATABASE_URL`（密码含特殊字符时按 URL 编码）。
+2. 本地 Docker：若卷已初始化过，需 `docker compose down -v` 后重建，或在已有实例上 `CREATE DATABASE` / 建新用户并授权（勿只改 `.env` 不改库）。
+3. 云上：在控制台创建同名库与用户，或只改 `DATABASE_URL` 指向厂商给定的库名与用户（团队内约定一种写法即可）。
+
 ---
 
 ## 二、获取代码与 Python 虚拟环境
@@ -81,16 +97,18 @@ ports:
 cp .env.example .env
 ```
 
-编辑 `.env`，至少设置（示例密码请改成你自己的）：
+编辑 `.env`，至少设置（示例密码请改成你自己的；`POSTGRES_*` 与 `DATABASE_URL` 须与 [数据库命名约定](#数据库命名约定) 一致）：
 
 ```env
+POSTGRES_DB=craftifyx_miner
+POSTGRES_USER=miner
 DB_PASSWORD=your_local_strong_password
 
-# 必须与上面密码一致，且用户/库名与 compose 一致
+# 库名、用户名、密码须与上面一致
 DATABASE_URL=postgresql://miner:your_local_strong_password@localhost:5432/craftifyx_miner
 ```
 
-Docker Compose 会在**项目根目录**自动读取 `.env`，用其中的 `DB_PASSWORD` 替换 compose 里的 `${DB_PASSWORD}`，供 `db` 容器使用。应用代码侧则由 [config/settings.py](../config/settings.py) 在导入时 `load_dotenv()` 加载同一 `.env`。
+Docker Compose 会在**项目根目录**自动读取 `.env`，将 `POSTGRES_DB`、`POSTGRES_USER`、`DB_PASSWORD` 注入 `db` 容器（见 [docker-compose.yml](../docker-compose.yml)）。应用代码侧由 [config/settings.py](../config/settings.py) 的 `load_dotenv()` 加载同一 `.env` 中的 `DATABASE_URL`。
 
 ### 3.2 仅启动数据库容器
 
@@ -361,7 +379,7 @@ streamlit run dashboard/app.py --server.port 8501 --server.address 127.0.0.1
 
 | 文件 | 说明 |
 |------|------|
-| [.env.example](../.env.example) | 环境变量模板 |
+| [.env.example](../.env.example) | 环境变量模板（含 `POSTGRES_DB` / `POSTGRES_USER`） |
 | [config/settings.py](../config/settings.py) | 从 `.env` 加载配置（`load_dotenv`） |
 | [docker-compose.yml](../docker-compose.yml) | 含 `db`、`server`、`dashboard`、`cron` 定义 |
 | [db/schema.sql](../db/schema.sql) | 表结构 |

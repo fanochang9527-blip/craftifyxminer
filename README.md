@@ -104,6 +104,8 @@ cp .env.example .env
 # 编辑 .env 填入真实的 API Key、数据库密码等
 ```
 
+**数据库命名（默认勿改）**：逻辑库名 `craftifyx_miner`、连接用户 `miner`，与 `DATABASE_URL` 及 `.env` 中 `POSTGRES_DB` / `POSTGRES_USER` 保持一致；详见 [docs/LOCAL_DEVELOPMENT.md](docs/LOCAL_DEVELOPMENT.md#数据库命名约定)。
+
 > **重要**: `.env` 文件包含敏感信息，已在 `.gitignore` 中排除，切勿提交到 Git。
 
 ### 3. 安装依赖

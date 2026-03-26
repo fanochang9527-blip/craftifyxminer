@@ -8,7 +8,7 @@ load_dotenv()
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-# --- 数据库 ---
+# --- 数据库（默认库名/用户与 .env 中 POSTGRES_DB / POSTGRES_USER 一致）---
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://miner:password@localhost:5432/craftifyx_miner")
 
 # --- Apify ---
