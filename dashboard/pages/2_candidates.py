@@ -1,5 +1,9 @@
 """Page 2: 候选人浏览与 BD 判定 — 筛选器 + 候选人卡片 + 雷达图 + BD 操作。"""
 
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+
 import streamlit as st
 import pandas as pd
 
@@ -15,9 +19,9 @@ with st.sidebar:
     centrality_filter = st.multiselect(
         "中心度",
         ["Hub", "Connector", "Peripheral"],
-        default=["Hub", "Connector"],
+        default=["Hub", "Connector", "Peripheral"],
     )
-    sps_min, sps_max = st.slider("SPS 范围", 0, 100, (50, 100))
+    sps_min, sps_max = st.slider("SPS 范围", 0, 100, (0, 100))
     creator_types = st.multiselect(
         "创作者类型",
         ["oc_creator", "vtuber", "fan_artist", "game_creator", "content_creator"],
@@ -29,7 +33,7 @@ with st.sidebar:
     )
     bd_status_filter = st.selectbox(
         "BD 状态",
-        ["pending", "rule_passed", "ai_passed", "interested", "rejected", "deferred", "all"],
+        ["ai_passed", "rule_passed", "pending", "interested", "rejected", "deferred", "all"],
         index=0,
     )
 

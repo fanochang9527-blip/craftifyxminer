@@ -122,10 +122,15 @@ def _pick_exploration_anchors(count: int) -> list[dict]:
     return anchors
 
 
-def trigger_l1_scan(anchors: list[dict] | None = None) -> dict:
+def trigger_l1_scan(
+    anchors: list[dict] | None = None,
+    max_following: int | None = None,
+) -> dict:
     """Trigger Apify Following Actor for the given anchor list.
 
-    Returns: {"runs_started": int, "budget_ok": bool}
+    max_following: 覆盖环境变量 MAX_FOLLOWING_PER_ANCHOR（冒烟时可传 30–50）。
+
+    Returns: {"runs_started": int, "budget_ok": bool, ...}
     """
     if anchors is None:
         anchors = generate_daily_seeds()
@@ -153,10 +158,25 @@ def trigger_l1_scan(anchors: list[dict] | None = None) -> dict:
         logger.info("No valid handles to scan")
         return {"runs_started": 0, "budget_ok": True}
 
-    base_input["handles"] = handles
-    base_input["max_items"] = MAX_FOLLOWING_PER_ANCHOR
+    if "twitterHandles" in base_input:
+        base_input["twitterHandles"] = handles
+    else:
+        base_input["handles"] = handles
+    cap = max_following if max_following is not None else MAX_FOLLOWING_PER_ANCHOR
+    if "maxItems" in base_input:
+        base_input["maxItems"] = cap
+    elif "max_items" in base_input:
+        base_input["max_items"] = cap
 
     run = client.actor(actor_id).call(run_input=base_input)
-    logger.info("Apify run started: %s", run.get("id"))
+    run_id = run.get("id", "")
+    logger.info("Apify run completed: %s", run_id)
 
-    return {"runs_started": 1, "budget_ok": True, "run_id": run.get("id")}
+    dataset_id = run.get("defaultDatasetId")
+    stored = {}
+    if dataset_id:
+        from pipeline.intake import process_dataset
+        stored = process_dataset(client, dataset_id)
+        logger.info("L1 results processed: %s", stored)
+
+    return {"runs_started": 1, "budget_ok": True, "run_id": run_id, "stored": stored}

@@ -1,5 +1,9 @@
 """Page 3: 联系追踪与销售反馈 — Interested 列表, 联系记录, GMV 录入, Seed 晋升。"""
 
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+
 import streamlit as st
 import pandas as pd
 from datetime import date

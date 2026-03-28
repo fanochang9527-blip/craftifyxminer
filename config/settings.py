@@ -73,6 +73,9 @@ EXPLORATION_RATIO = float(os.getenv("EXPLORATION_RATIO", "0.20"))
 DAILY_ANCHOR_COUNT = int(os.getenv("DAILY_ANCHOR_COUNT", "20"))
 MAX_FOLLOWING_PER_ANCHOR = int(os.getenv("MAX_FOLLOWING_PER_ANCHOR", "500"))
 
+# --- 深度抓取（每批人数，冒烟时可设 3–5）---
+DEEP_SCRAPE_BATCH_SIZE = int(os.getenv("DEEP_SCRAPE_BATCH_SIZE", "50"))
+
 # --- 路径 ---
 BIO_RULES_PATH = PROJECT_ROOT / "config" / "bio_rules.yaml"
 WEIGHTS_PATH = PROJECT_ROOT / "config" / "weights.yaml"

@@ -17,8 +17,9 @@ sqlalchemy==2.0.*
 # LLM (统一 OpenAI 兼容接口)
 openai==1.66.*
 
-# Apify
+# Apify（须与 apify-client 1.8 匹配的 apify-shared 1.x，避免 pip 解析到 2.x 导致 ImportError）
 apify-client==1.8.*
+apify-shared>=1.1.2,<2
 
 # Dashboard
 streamlit==1.41.*

@@ -1,32 +1,30 @@
 # Apify Actor 配置
-# Actor ID 和参数模板，handles 由代码动态填入
+# Actor ID 和参数模板，handles / twitterHandles 由代码动态填入
+# 验证日期: 2026-03-28  Token: dulcet_peeler (Starter plan)
 
 following_actor:
-  actor_id: "apidojo/twitter-scraper-v2"
+  # apidojo/twitter-user-scraper — 支持 profiles / followers / following
+  # 付费: $0.016/following query + $0.0004/user (首页 ~70 人免费)
+  actor_id: "apidojo/twitter-user-scraper"
   input:
-    action: "following"
-    handles: []
-    max_items: 500
-    proxy:
-      useApifyProxy: true
-      apifyProxyGroups: ["DATACENTER"]
+    twitterHandles: []
+    getFollowing: true
+    getFollowers: false
+    maxItems: 500
 
 profile_actor:
+  # apidojo/tweet-scraper — Tweet Scraper V2, 抓推文+profile
+  # maxItems 需按 handles数 × 每人期望推文数 设置
   actor_id: "apidojo/tweet-scraper"
   input:
-    handles: []
-    maxTweets: 10
-    includeReplies: false
-    proxy:
-      useApifyProxy: true
-      apifyProxyGroups: ["RESIDENTIAL"]
+    twitterHandles: []
+    maxItems: 500
 
 followers_actor:
-  actor_id: "apidojo/twitter-scraper-v2"
+  # 与 following_actor 同一 Actor，切换 getFollowers 标志
+  actor_id: "apidojo/twitter-user-scraper"
   input:
-    action: "followers"
-    handles: []
-    max_items: 1000
-    proxy:
-      useApifyProxy: true
-      apifyProxyGroups: ["DATACENTER"]
+    twitterHandles: []
+    getFollowers: true
+    getFollowing: false
+    maxItems: 1000

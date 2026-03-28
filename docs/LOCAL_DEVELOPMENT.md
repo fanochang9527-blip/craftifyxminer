@@ -353,6 +353,7 @@ streamlit run dashboard/app.py --server.port 8501 --server.address 127.0.0.1
 | 现象 | 可能原因 | 处理 |
 |------|----------|------|
 | `connection refused` 连不上 5432 | Docker 未启动或端口占用 | `docker compose ps`；本机是否已有其他 PG 占 5432 |
+| Flask 起不来或 `/health` 返回 **403**、提示 5000 占用 | macOS「隔空播放接收器」等占用 **5000** | 系统设置中关闭隔空播放接收器，或 `.env` 设 `FLASK_PORT=5001` 后用 `http://127.0.0.1:5001/health` |
 | 表不存在 | 卷已初始化过但未执行 schema | 见上文「手动执行 SQL」或 `down -v` 重建 |
 | `ModuleNotFoundError` | 未在根目录执行或未激活 venv | `cd` 到仓库根，`source venv/bin/activate` |
 | pytest 部分失败 | 缺依赖或 mock 问题 | `pip install -r requirements.txt` 后重跑 |

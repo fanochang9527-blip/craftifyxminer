@@ -9,12 +9,15 @@ from datetime import date
 import yaml
 from apify_client import ApifyClient
 
-from config.settings import APIFY_API_TOKEN, APIFY_CONFIG_PATH, DAILY_APIFY_BUDGET_USD
+from config.settings import (
+    APIFY_API_TOKEN,
+    APIFY_CONFIG_PATH,
+    DAILY_APIFY_BUDGET_USD,
+    DEEP_SCRAPE_BATCH_SIZE,
+)
 from db.connection import fetch_all, fetch_one, get_cursor, upsert_cost
 
 logger = logging.getLogger(__name__)
-
-DEEP_SCRAPE_BATCH_SIZE = 50
 
 
 def _get_pending_candidates(limit: int = DEEP_SCRAPE_BATCH_SIZE) -> list[dict]:
@@ -41,31 +44,40 @@ def _check_budget() -> bool:
 
 
 def _store_deep_scrape_results(items: list[dict]) -> dict:
-    """Parse Apify deep-scrape results and upsert into creators + tweets tables."""
-    profiles_updated = tweets_inserted = 0
+    """Parse apidojo/tweet-scraper results (each item = one tweet) into creators + tweets.
+
+    Groups tweets by author, updates creator profile once per author, then inserts tweets.
+    """
+    from collections import defaultdict
+
+    by_author: dict[str, list[dict]] = defaultdict(list)
+    author_info: dict[str, dict] = {}
 
     for item in items:
-        username = (item.get("username") or item.get("screen_name") or item.get("userName") or "").lstrip("@").lower()
+        author = item.get("author") or {}
+        username = (author.get("userName") or author.get("username") or "").lstrip("@").lower()
+        if not username:
+            username = (item.get("userName") or item.get("username") or "").lstrip("@").lower()
         if not username:
             continue
+        by_author[username].append(item)
+        if username not in author_info:
+            author_info[username] = author
 
-        # Update creator profile with richer data
+    profiles_updated = tweets_inserted = 0
+
+    for username, tweets in by_author.items():
+        author = author_info[username]
         with get_cursor() as cur:
             cur.execute(
                 """UPDATE creators SET
                        followers = COALESCE(%s, followers),
-                       following = COALESCE(%s, following),
-                       tweets_count = COALESCE(%s, tweets_count),
-                       bio = COALESCE(NULLIF(%s, ''), bio),
-                       website = COALESCE(NULLIF(%s, ''), website)
+                       following = COALESCE(%s, following)
                    WHERE username = %s
                    RETURNING id""",
                 (
-                    item.get("followers") or item.get("followersCount"),
-                    item.get("following") or item.get("friendsCount"),
-                    item.get("statusesCount") or item.get("tweetsCount"),
-                    item.get("description") or item.get("bio") or "",
-                    item.get("website") or item.get("url") or "",
+                    author.get("followers") or author.get("followersCount"),
+                    author.get("following") or author.get("friendsCount"),
                     username,
                 ),
             )
@@ -75,16 +87,16 @@ def _store_deep_scrape_results(items: list[dict]) -> dict:
             creator_id = row["id"]
             profiles_updated += 1
 
-        # Insert tweets
-        tweets = item.get("tweets") or item.get("statuses") or []
         for tw in tweets:
             tweet_id = str(tw.get("id") or tw.get("id_str") or "")
             if not tweet_id:
                 continue
 
-            media = tw.get("media_urls") or []
-            if not media and tw.get("entities"):
-                media = [m.get("media_url_https", "") for m in tw["entities"].get("media", [])]
+            media: list[str] = []
+            for m in tw.get("extendedEntities", {}).get("media", []):
+                url = m.get("media_url_https") or m.get("media_url") or ""
+                if url:
+                    media.append(url)
 
             with get_cursor() as cur:
                 cur.execute(
@@ -96,11 +108,11 @@ def _store_deep_scrape_results(items: list[dict]) -> dict:
                     (
                         tweet_id,
                         creator_id,
-                        tw.get("likes") or tw.get("favorite_count") or 0,
-                        tw.get("retweets") or tw.get("retweet_count") or 0,
-                        tw.get("replies") or tw.get("reply_count") or 0,
-                        tw.get("views") or tw.get("view_count") or 0,
-                        tw.get("created_at"),
+                        tw.get("likeCount") or tw.get("likes") or 0,
+                        tw.get("retweetCount") or tw.get("retweets") or 0,
+                        tw.get("replyCount") or tw.get("replies") or 0,
+                        tw.get("viewCount") or tw.get("views") or 0,
+                        tw.get("createdAt") or tw.get("created_at"),
                         tw.get("text") or tw.get("full_text") or "",
                         media or [],
                     ),
@@ -110,11 +122,13 @@ def _store_deep_scrape_results(items: list[dict]) -> dict:
     return {"profiles_updated": profiles_updated, "tweets_inserted": tweets_inserted}
 
 
-def trigger_deep_scrape_batch(limit: int = DEEP_SCRAPE_BATCH_SIZE) -> dict:
+def trigger_deep_scrape_batch(limit: int | None = None) -> dict:
     """Trigger deep-scrape for the next batch of filtered candidates.
 
     Returns: {"candidates": int, "run_id": str|None, "budget_ok": bool}
     """
+    if limit is None:
+        limit = DEEP_SCRAPE_BATCH_SIZE
     if not _check_budget():
         return {"candidates": 0, "run_id": None, "budget_ok": False}
 
@@ -131,7 +145,12 @@ def trigger_deep_scrape_batch(limit: int = DEEP_SCRAPE_BATCH_SIZE) -> dict:
 
     profile_cfg = apify_cfg["profile_actor"]
     actor_input = profile_cfg["input"].copy()
-    actor_input["handles"] = handles
+    if "twitterHandles" in actor_input:
+        actor_input["twitterHandles"] = handles
+    else:
+        actor_input["handles"] = handles
+    tweets_per_handle = 10
+    actor_input["maxItems"] = max(actor_input.get("maxItems", 500), len(handles) * tweets_per_handle)
 
     client = ApifyClient(APIFY_API_TOKEN)
     run = client.actor(profile_cfg["actor_id"]).call(run_input=actor_input)
@@ -144,13 +163,15 @@ def trigger_deep_scrape_batch(limit: int = DEEP_SCRAPE_BATCH_SIZE) -> dict:
         stats = _store_deep_scrape_results(items)
         logger.info("Deep scrape complete: %s", stats)
 
-        # Update batch stats
         with get_cursor() as cur:
             cur.execute(
                 """UPDATE discovery_batches
                    SET after_deep_scrape = after_deep_scrape + %s
-                   WHERE batch_date = CURRENT_DATE
-                   ORDER BY created_at DESC LIMIT 1""",
+                   WHERE id = (
+                       SELECT id FROM discovery_batches
+                       WHERE batch_date = CURRENT_DATE
+                       ORDER BY created_at DESC LIMIT 1
+                   )""",
                 (stats["profiles_updated"],),
             )
 

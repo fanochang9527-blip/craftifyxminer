@@ -1,5 +1,9 @@
 """Page 1: 每日发现报告 — 今日候选数、中心度分布、SPS 筛选、趋势图。"""
 
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px

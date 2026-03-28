@@ -1,5 +1,9 @@
 """Page 4: 成本监控面板 — 日/月成本, 预算进度条, 超预算预警。"""
 
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
