@@ -60,6 +60,10 @@ PROVIDER_MODELS = {
 FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "dev-only-change-in-production")
 FLASK_PORT = int(os.getenv("FLASK_PORT", "5000"))
 
+# --- JWT ---
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", FLASK_SECRET_KEY)
+JWT_EXPIRY_HOURS = int(os.getenv("JWT_EXPIRY_HOURS", "24"))
+
 # --- Streamlit ---
 STREAMLIT_PORT = int(os.getenv("STREAMLIT_PORT", "8501"))
 

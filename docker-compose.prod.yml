@@ -1,0 +1,65 @@
+services:
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      server:
+        condition: service_healthy
+      dashboard:
+        condition: service_healthy
+
+  server:
+    build: .
+    command: >
+      gunicorn -w 2 -b 0.0.0.0:5000
+      --access-logfile /app/logs/gunicorn-access.log
+      --error-logfile /app/logs/gunicorn-error.log
+      server.app:app
+    restart: unless-stopped
+    expose:
+      - "5000"
+    env_file: .env
+    volumes:
+      - app_logs:/app/logs
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:5000/health')\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  dashboard:
+    build: .
+    command: streamlit run dashboard/app.py --server.port=8501 --server.address=0.0.0.0 --server.headless=true
+    restart: unless-stopped
+    expose:
+      - "8501"
+    env_file: .env
+    volumes:
+      - app_logs:/app/logs
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  cron:
+    build: .
+    command: python cron/daily_job.py
+    restart: unless-stopped
+    depends_on:
+      server:
+        condition: service_healthy
+    env_file: .env
+    volumes:
+      - app_logs:/app/logs
+
+volumes:
+  nginx_logs:
+  app_logs:

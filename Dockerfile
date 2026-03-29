@@ -9,6 +9,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+RUN groupadd -r appuser && useradd -r -g appuser -d /app appuser \
+    && mkdir -p /app/logs && chown -R appuser:appuser /app
+
+COPY --chown=appuser:appuser . .
+
+USER appuser
 
 EXPOSE 5000 8501

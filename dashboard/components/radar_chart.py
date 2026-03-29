@@ -1,8 +1,10 @@
-"""10 维雷达图组件 — Plotly go.Scatterpolar."""
+"""10 维雷达图组件 — Plotly go.Scatterpolar。"""
+
+from __future__ import annotations
 
 import plotly.graph_objects as go
 
-DIMENSION_LABELS = [
+DEFAULT_DIMENSION_LABELS = [
     "Audience",
     "Engagement",
     "Virality",
@@ -29,21 +31,28 @@ DIMENSION_KEYS = [
 ]
 
 
-def create_radar_chart(features: dict, title: str = "Creator Profile") -> go.Figure:
+def create_radar_chart(
+    features: dict,
+    title: str = "Creator Profile",
+    labels: list[str] | None = None,
+) -> go.Figure:
     """Create a 10-dimensional radar chart for a creator's feature scores.
 
     Args:
         features: dict with keys matching DIMENSION_KEYS, values 0-100
         title: chart title
+        labels: optional 10 translated axis labels (same order as DIMENSION_KEYS)
     """
+    dim_labels = labels if labels is not None and len(labels) == len(DIMENSION_KEYS) else DEFAULT_DIMENSION_LABELS
+
     values = [float(features.get(k, 0) or 0) for k in DIMENSION_KEYS]
     values.append(values[0])  # close the polygon
-    labels = DIMENSION_LABELS + [DIMENSION_LABELS[0]]
+    theta_labels = dim_labels + [dim_labels[0]]
 
     fig = go.Figure()
     fig.add_trace(go.Scatterpolar(
         r=values,
-        theta=labels,
+        theta=theta_labels,
         fill="toself",
         fillcolor="rgba(99, 110, 250, 0.2)",
         line=dict(color="rgb(99, 110, 250)", width=2),

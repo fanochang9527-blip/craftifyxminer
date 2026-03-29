@@ -40,13 +40,19 @@ craftifyxminer/
 │   ├── apify_config.yaml       # Apify Actor 参数
 │   ├── weights.yaml            # 5 类创作者 SPS 权重矩阵
 │   └── bio_rules.yaml          # BIO 知识库 (Link DNA / 语义矩阵 / Emoji 信号)
+├── auth/                       # 认证与权限
+│   ├── password.py             # bcrypt 哈希 / 复杂度校验
+│   ├── login.py                # 登录核心逻辑 (锁定 / 审计)
+│   ├── session.py              # Streamlit session 管理
+│   ├── decorators.py           # Flask @login_required / @admin_required (JWT)
+│   └── manage.py               # CLI 用户管理 (create-admin / reset-password)
 ├── db/                         # 数据库
 │   ├── connection.py           # 连接池管理
-│   ├── schema.sql              # 9 张核心表 DDL
+│   ├── schema.sql              # 11 张核心表 DDL
 │   ├── indexes.sql             # 查询优化索引
 │   └── migrations/             # 增量迁移脚本
 ├── server/                     # Flask 后端
-│   ├── app.py                  # 主应用入口
+│   ├── app.py                  # 主应用入口 (含 JWT 登录 + 限流)
 │   ├── webhook.py              # Apify Webhook 接收 + 三级管道流转
 │   └── api.py                  # 内部 REST API (stats / cost / trigger)
 ├── pipeline/                   # 数据管道
@@ -59,26 +65,33 @@ craftifyxminer/
 │   ├── sps_scorer.py           # SPS 评分 + 中心度分层
 │   └── evolution.py            # 飞轮进化 (Seed 晋升 + 月度报告)
 ├── dashboard/                  # Streamlit BD 工作台
-│   ├── app.py                  # 主入口
+│   ├── app.py                  # 主入口 (含登录门 + 语言切换)
+│   ├── i18n.py                 # 国际化翻译加载器
+│   ├── locales/
+│   │   ├── zh.yaml             # 中文翻译
+│   │   └── en.yaml             # 英文翻译
 │   ├── pages/
 │   │   ├── 1_daily_report.py   # 每日发现报告
 │   │   ├── 2_candidates.py     # 候选人浏览与 BD 判定
 │   │   ├── 3_outreach.py       # 联系追踪与销售反馈
-│   │   └── 4_cost_monitor.py   # 成本监控面板
+│   │   ├── 4_cost_monitor.py   # 成本监控面板
+│   │   └── 5_admin.py          # Admin 管理面板 (用户/审计)
 │   └── components/
 │       └── radar_chart.py      # 10 维雷达图 (Plotly)
+├── nginx/                      # Nginx 反向代理配置
+│   └── nginx.conf              # 含安全头 + 限流规则
+├── scripts/                    # 运维脚本
+│   ├── deploy.sh               # 一键部署 (Docker 安装 + .env 配置 + 启动)
+│   └── backup_db.sh            # PostgreSQL 备份 (pg_dump + 7 天保留)
 ├── cron/                       # 定时任务
 │   └── daily_job.py            # APScheduler 编排
 ├── tests/                      # 测试
-│   ├── test_bio_rule_filter.py # BIO 规则快筛测试
-│   ├── test_ai_filter.py       # AI 过滤测试
-│   ├── test_feature_engine.py  # 指标计算测试
-│   └── test_sps_scorer.py      # SPS 评分测试
 ├── docs/                       # 项目文档
 ├── .env.example                # 环境变量模板
 ├── requirements.txt            # Python 依赖
-├── Dockerfile
-└── docker-compose.yml          # 一键启动
+├── Dockerfile                  # 非 root 用户镜像
+├── docker-compose.yml          # 本地开发 (含 PG 容器)
+└── docker-compose.prod.yml     # 生产部署 (Nginx + 无 PG 容器)
 ```
 
 ## 快速开始
@@ -167,6 +180,56 @@ pytest tests/ -v
 | 23:00 | `daily_summary` | 日报统计 + 成本更新 + Seed 晋升检查 |
 
 Webhook 回调后自动执行: 规则快筛 → AI 过滤 → 状态更新。
+
+## 服务器部署 (阿里云 / 云服务器)
+
+推荐使用一键安装脚本 `scripts/deploy.sh`，支持 Ubuntu 20/22 和 CentOS 7/8：
+
+```bash
+# 1. 将代码上传到服务器
+git clone <repo_url> /opt/craftifyxminer
+cd /opt/craftifyxminer
+
+# 2. 运行一键部署（需要 root 权限）
+sudo bash scripts/deploy.sh
+```
+
+脚本将自动完成：
+1. 安装 Docker + Docker Compose
+2. 交互式配置 `.env`（输入 RDS 地址、API Key 等）
+3. 自动生成 `FLASK_SECRET_KEY` 和 `JWT_SECRET_KEY`
+4. 初始化数据库 schema
+5. 创建 Admin 用户
+6. 启动 Nginx + Flask + Streamlit + Cron
+7. 配置每日 3:00 AM 数据库备份
+8. 配置防火墙（仅开放 22/80/443）
+
+部署完成后访问 `http://<服务器IP>` 即可使用 Dashboard。
+
+### HTTPS 配置（可选）
+
+购买域名后，仅需 3 步：
+1. DNS A 记录指向服务器 IP
+2. 在 `nginx/nginx.conf` 中修改 `server_name`
+3. 运行 `certbot --nginx -d yourdomain.com`
+
+### 运维命令
+
+```bash
+# 查看日志
+docker compose -f docker-compose.prod.yml logs -f
+
+# 重启服务
+docker compose -f docker-compose.prod.yml restart
+
+# 手动备份
+bash scripts/backup_db.sh
+
+# 用户管理
+docker compose -f docker-compose.prod.yml run --rm server python -m auth.manage create-user --username bd1 --password 'SecurePass1'
+docker compose -f docker-compose.prod.yml run --rm server python -m auth.manage reset-password --username admin --password 'NewPass123'
+docker compose -f docker-compose.prod.yml run --rm server python -m auth.manage unlock --username admin
+```
 
 ## 安全须知
 

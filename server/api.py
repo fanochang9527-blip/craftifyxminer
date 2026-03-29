@@ -5,6 +5,7 @@ from datetime import date
 
 from flask import Blueprint, request, jsonify
 
+from auth.decorators import admin_required, login_required
 from db.connection import fetch_all, fetch_one
 
 logger = logging.getLogger(__name__)
@@ -13,6 +14,7 @@ api_bp = Blueprint("api", __name__, url_prefix="/api")
 
 
 @api_bp.route("/trigger-deep-scrape", methods=["POST"])
+@admin_required
 def trigger_deep_scrape():
     """Trigger deep scrape for creators that passed AI filter."""
     from pipeline.deep_scrape import trigger_deep_scrape_batch
@@ -23,6 +25,7 @@ def trigger_deep_scrape():
 
 
 @api_bp.route("/daily-stats")
+@login_required
 def daily_stats():
     """Return today's discovery pipeline statistics."""
     today = date.today().isoformat()
@@ -40,6 +43,7 @@ def daily_stats():
 
 
 @api_bp.route("/cost-summary")
+@login_required
 def cost_summary():
     """Return cost tracking for today and month-to-date."""
     today_row = fetch_one(

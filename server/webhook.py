@@ -18,7 +18,8 @@ webhook_bp = Blueprint("webhook", __name__)
 
 def _verify_signature(payload: bytes, signature: str) -> bool:
     if not APIFY_WEBHOOK_SECRET:
-        return True
+        logger.error("APIFY_WEBHOOK_SECRET is not set — rejecting webhook")
+        return False
     expected = hmac.new(
         APIFY_WEBHOOK_SECRET.encode(), payload, hashlib.sha256
     ).hexdigest()

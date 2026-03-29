@@ -1,4 +1,4 @@
-"""Streamlit BD Dashboard 主入口。"""
+"""Streamlit BD Dashboard 主入口 — st.navigation() 集中路由。"""
 
 import sys
 from pathlib import Path
@@ -14,18 +14,32 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-st.sidebar.title("CraftifyX Miner 7.0")
+from auth.session import require_login, logout  # noqa: E402
+from dashboard.i18n import t, language_selector  # noqa: E402
+
+user = require_login()
+if not user:
+    st.stop()
+
+pages = [
+    st.Page("pages/0_home.py", title=t("nav.home"), icon="🏠"),
+    st.Page("pages/1_daily_report.py", title=t("nav.daily_report"), icon="📊"),
+    st.Page("pages/2_candidates.py", title=t("nav.candidates"), icon="👤"),
+    st.Page("pages/3_outreach.py", title=t("nav.outreach"), icon="📞"),
+    st.Page("pages/4_cost_monitor.py", title=t("nav.cost_monitor"), icon="💸"),
+]
+
+if user.get("role") == "admin":
+    pages.append(st.Page("pages/5_admin.py", title=t("nav.admin"), icon="⚙️"))
+
+pg = st.navigation(pages)
+
+st.sidebar.title(t("app.sidebar_title"))
+st.sidebar.caption(f"👤 {user.get('display_name', user['username'])}  ({user['role']})")
+if st.sidebar.button(t("app.logout")):
+    logout()
+    st.rerun()
+language_selector()
 st.sidebar.markdown("---")
 
-st.title("CraftifyX Miner Dashboard")
-st.markdown(
-    """
-    欢迎使用 CraftifyX Miner 7.0 BD Dashboard。
-
-    **导航页面** (侧边栏):
-    - **Daily Report** — 每日发现报告
-    - **Candidates** — 候选人浏览与 BD 判定
-    - **Outreach** — 联系追踪与销售反馈
-    - **Cost Monitor** — 成本监控面板
-    """
-)
+pg.run()
