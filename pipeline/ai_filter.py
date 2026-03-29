@@ -1,8 +1,8 @@
-"""Level 3 国产大模型 Bio 过滤 — 处理规则快筛未覆盖的灰区 BIO (~30%).
+"""Level 3 大模型 Bio 过滤 — 处理规则快筛未覆盖的灰区 BIO (~30%).
 
-所有模型统一通过 OpenAI SDK 兼容接口调用，仅切换 base_url + api_key + model。
-支持 Qwen3.5-Plus / Kimi K2.5 / DeepSeek 三 provider。
-利用长上下文 (256K) 一次批量处理 50 条 Bio。
+统一 OpenAI 兼容接口；默认仅 Moonshot Kimi（见 config.settings.FALLBACK_CHAIN）。
+可选通过 LLM_FALLBACK_CHAIN 启用 deepseek / dashscope。
+利用长上下文一次批量处理多条 Bio。
 """
 
 import asyncio
@@ -10,7 +10,7 @@ import json
 import logging
 from datetime import date
 
-from openai import AsyncOpenAI, AuthenticationError, PermissionDeniedError
+from openai import APIStatusError, AsyncOpenAI, AuthenticationError, PermissionDeniedError
 
 from config.settings import (
     FALLBACK_CHAIN,
@@ -91,6 +91,16 @@ class LLMClient:
         return {"content": content, "usage": usage}
 
 
+def _is_non_retryable_auth_error(exc: BaseException) -> bool:
+    """401/403 不应指数退避重试；兼容模式网关常抛 APIStatusError 而非 AuthenticationError。"""
+    if isinstance(exc, (AuthenticationError, PermissionDeniedError)):
+        return True
+    if isinstance(exc, APIStatusError):
+        code = getattr(exc, "status_code", None)
+        return code in (401, 403)
+    return False
+
+
 class AIFilter:
     """Level 3 AI filter with batch processing, fallback chain, and cost tracking."""
 
@@ -110,8 +120,6 @@ class AIFilter:
     def _get_client_chain(self) -> list[LLMClient]:
         return [self._clients[p] for p in self._fallback_chain if p in self._clients]
 
-    _NO_RETRY_ERRORS = (AuthenticationError, PermissionDeniedError)
-
     async def _call_with_retry(self, messages: list[dict], max_retries: int = 3) -> dict:
         """Call LLM with exponential backoff and provider fallback."""
         clients = self._get_client_chain()
@@ -124,17 +132,16 @@ class AIFilter:
                 try:
                     async with self._semaphore:
                         return await client.chat(messages)
-                except self._NO_RETRY_ERRORS as e:
-                    logger.warning(
-                        "Provider %s auth failed (HTTP %s), skipping: %s",
-                        client.provider,
-                        getattr(e, "status_code", "?"),
-                        e,
-                    )
-                    last_error = e
-                    break
                 except Exception as e:
                     last_error = e
+                    if _is_non_retryable_auth_error(e):
+                        logger.warning(
+                            "Provider %s auth denied (HTTP %s), trying next: %s",
+                            client.provider,
+                            getattr(e, "status_code", "?"),
+                            e,
+                        )
+                        break
                     wait = 2 ** attempt
                     logger.warning(
                         "Provider %s attempt %d failed: %s. Retrying in %ds",
@@ -144,7 +151,6 @@ class AIFilter:
             else:
                 logger.error("Provider %s exhausted retries, trying next", client.provider)
                 continue
-            logger.error("Provider %s skipped due to non-retryable error", client.provider)
 
         raise RuntimeError(f"All providers failed. Last error: {last_error}")
 

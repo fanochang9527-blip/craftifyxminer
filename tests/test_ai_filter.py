@@ -2,11 +2,13 @@
 
 import asyncio
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
+from openai import APIStatusError
 
-from pipeline.ai_filter import AIFilter, LLMClient, SYSTEM_PROMPT
+from pipeline.ai_filter import AIFilter, LLMClient, SYSTEM_PROMPT, _is_non_retryable_auth_error
 
 
 class TestLLMClient:
@@ -103,3 +105,40 @@ class TestAIFilter:
         assert "illustrator" in SYSTEM_PROMPT
         assert "commission open" in SYSTEM_PROMPT
         assert "Fan accounts" in SYSTEM_PROMPT
+
+    def test_401_api_status_error_no_retry_second_provider(self):
+        """DashScope 等兼容网关常抛 APIStatusError(401)，不应退避重试三次。"""
+        req = httpx.Request("POST", "https://example.com/v1/chat/completions")
+        resp = httpx.Response(401, request=req)
+        err_401 = APIStatusError("invalid key", response=resp, body=None)
+
+        with patch("pipeline.ai_filter.PROVIDER_CONFIGS", {
+            "bad": {"api_key": "sk-bad", "base_url": "https://bad.example/v1"},
+            "good": {"api_key": "sk-good", "base_url": "https://good.example/v1"},
+        }), patch("pipeline.ai_filter.FALLBACK_CHAIN", ["bad", "good"]), \
+             patch("pipeline.ai_filter.PROVIDER_MODELS", {"bad": "m1", "good": "m2"}):
+            filt = AIFilter(batch_size=5)
+
+        bios = [{"id": 1, "bio": "artist"}]
+        mock_ok = {
+            "content": json.dumps([
+                {"bio_id": 1, "result": "YES", "type": "content_creator", "confidence": 0.9},
+            ]),
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+        }
+        bad_chat = AsyncMock(side_effect=err_401)
+        good_chat = AsyncMock(return_value=mock_ok)
+
+        with patch.object(filt._clients["bad"], "chat", bad_chat), \
+             patch.object(filt._clients["good"], "chat", good_chat):
+            results = asyncio.get_event_loop().run_until_complete(filt.filter_batch(bios))
+
+        assert bad_chat.await_count == 1
+        assert good_chat.await_count == 1
+        assert results[0]["result"] == "YES"
+
+
+def test_is_non_retryable_auth_error_detects_api_status_401():
+    req = httpx.Request("POST", "https://x")
+    e = APIStatusError("x", response=httpx.Response(401, request=req), body=None)
+    assert _is_non_retryable_auth_error(e) is True

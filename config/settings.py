@@ -38,7 +38,9 @@ PROVIDER_CONFIGS = {
     },
 }
 
-FALLBACK_CHAIN = os.getenv("LLM_FALLBACK_CHAIN", "moonshot,deepseek,dashscope").split(",")
+# 默认仅 Kimi（Moonshot）；需 DeepSeek/百炼时再设 LLM_FALLBACK_CHAIN=moonshot,deepseek,dashscope
+_fallback_raw = os.getenv("LLM_FALLBACK_CHAIN", "moonshot")
+FALLBACK_CHAIN = [p.strip() for p in _fallback_raw.split(",") if p.strip()]
 
 # --- LLM provider-specific model overrides ---
 PROVIDER_MODELS = {
