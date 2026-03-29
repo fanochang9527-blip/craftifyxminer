@@ -161,7 +161,7 @@ init_database() {
         docker run --rm \
             -v "$PROJECT_DIR/db:/sql:ro" \
             --network host \
-            postgres:15-alpine \
+            postgres:18-alpine \
             sh -c "psql '$DATABASE_URL' -f /sql/schema.sql && psql '$DATABASE_URL' -f /sql/indexes.sql 2>/dev/null || true"
     fi
     log "Database schema initialized"

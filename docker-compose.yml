@@ -1,9 +1,10 @@
 services:
   db:
-    image: postgres:15-alpine
+    image: postgres:18-alpine
     restart: unless-stopped
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      # PG 18+ 官方镜像建议挂载 /var/lib/postgresql（非 .../data）
+      - pgdata:/var/lib/postgresql
       - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
       - ./db/indexes.sql:/docker-entrypoint-initdb.d/02-indexes.sql
     environment:

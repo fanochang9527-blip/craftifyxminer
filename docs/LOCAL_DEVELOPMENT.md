@@ -76,9 +76,12 @@ pip install -r requirements.txt
 
 项目自带 [docker-compose.yml](../docker-compose.yml)，其中 `db` 服务会：
 
-- 使用镜像 `postgres:15-alpine`
+- 使用镜像 `postgres:18-alpine`
 - 将 [db/schema.sql](../db/schema.sql) 与 [db/indexes.sql](../db/indexes.sql) 挂载到 `docker-entrypoint-initdb.d`，**仅在数据卷首次初始化时**自动执行建表与索引
 - 默认映射本机端口 `5432`
+- 数据卷挂载在 **`/var/lib/postgresql`**（PostgreSQL 18+ 官方镜像推荐路径，与旧版只挂 `.../data` 不兼容）
+
+**从旧版镜像或旧卷升级 / 容器一直重启时**：数据无法原地跨大版本复用，在项目根执行 `docker compose down -v` 清空命名卷后，再 `docker compose up -d db`（**会删除本地 Docker 内该库全部数据**）。
 
 ### 3.0 端口冲突（可选）
 

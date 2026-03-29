@@ -201,7 +201,7 @@ graph TB
 ### 3.2 本地开发环境
 
 - Python 3.11+
-- PostgreSQL 15+ (本地或 Docker)
+- PostgreSQL 18+ (本地或 Docker，`docker-compose.yml` 默认 `postgres:18-alpine`)
 - 依赖见 `requirements.txt`:
 
 ```
@@ -955,9 +955,9 @@ oc_creator:
 ```yaml
 services:
   db:
-    image: postgres:15
+    image: postgres:18-alpine
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql
       - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
     environment:
       POSTGRES_DB: craftifyx_miner

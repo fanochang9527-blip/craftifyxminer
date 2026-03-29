@@ -99,7 +99,7 @@ craftifyxminer/
 ### 前提条件
 
 - Python 3.11+
-- PostgreSQL 15+（或使用 Docker）
+- PostgreSQL 18+（或使用 Docker，本地 Compose 默认 `postgres:18-alpine`）
 - Apify 账号（Starter 计划）
 - 国产大模型 API Key（阿里云百炼 / DeepSeek / Kimi 等任一）
 
@@ -136,7 +136,7 @@ docker compose up -d
 ```
 
 这将启动 4 个服务：
-- **db** — PostgreSQL 15 (自动执行 schema.sql + indexes.sql)
+- **db** — PostgreSQL 18 (自动执行 schema.sql + indexes.sql)
 - **server** — Flask 后端 (Gunicorn, :5000)
 - **dashboard** — Streamlit Dashboard (:8501)
 - **cron** — APScheduler 定时任务
@@ -252,7 +252,7 @@ docker compose -f docker-compose.prod.yml run --rm server python -m auth.manage 
 | 后端 | Python (Flask / aiohttp) |
 | 数据采集 | Apify (Twitter/X Actor) |
 | AI 过滤 | 国产大模型 (Qwen / Kimi / DeepSeek，OpenAI 兼容接口) |
-| 数据库 | PostgreSQL 15+ |
+| 数据库 | PostgreSQL 18+ |
 | Dashboard | Streamlit + Plotly |
 | 定时任务 | APScheduler |
 | 部署 | Docker Compose + Nginx |
