@@ -16,7 +16,6 @@ import logging
 import sys
 from pathlib import Path
 
-# 保证可 import 项目包
 _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
@@ -28,10 +27,7 @@ logger = logging.getLogger("quick_smoke")
 def main() -> int:
     import config.settings  # noqa: F401 — 加载 .env
     from db.connection import fetch_all
-    from pipeline.deep_scrape import trigger_deep_scrape_batch
-    from pipeline.discovery import trigger_l1_scan
-    from pipeline.feature_engine import compute_all_pending
-    from pipeline.sps_scorer import score_all_pending
+    from pipeline.runner import run_full_pipeline
 
     p = argparse.ArgumentParser(description="Quick smoke: L1 + deep scrape + features + SPS")
     p.add_argument("--anchors", type=int, default=1, help="种子锚点数量（默认 1）")
@@ -40,6 +36,7 @@ def main() -> int:
     p.add_argument("--skip-l1", action="store_true", help="跳过 L1，只做 deep + 评分")
     args = p.parse_args()
 
+    anchors = None
     if not args.skip_l1:
         seeds = fetch_all(
             """SELECT id, username FROM creators
@@ -55,18 +52,9 @@ def main() -> int:
             {"username": s["username"], "strategy": "smoke", "seed_id": s["id"]}
             for s in seeds
         ]
-        logger.info("L1: %d anchors, max_following=%d", len(anchors), args.max_following)
-        r1 = trigger_l1_scan(anchors=anchors, max_following=args.max_following)
-        logger.info("L1 result: %s", r1)
 
-    logger.info("Deep scrape limit=%d", args.deep_limit)
-    r2 = trigger_deep_scrape_batch(limit=args.deep_limit)
-    logger.info("Deep scrape: %s", r2)
-
-    n_feat = compute_all_pending()
-    n_score = score_all_pending()
-    logger.info("Features computed: %d, scores: %d", n_feat, n_score)
-    return 0
+    result = run_full_pipeline(anchors=anchors, deep_limit=args.deep_limit)
+    return 0 if result.get("status") == "SUCCESS" else 1
 
 
 if __name__ == "__main__":
