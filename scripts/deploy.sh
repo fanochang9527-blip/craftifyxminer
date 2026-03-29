@@ -89,10 +89,15 @@ configure_env() {
     read -rp "APIFY_API_TOKEN: " APIFY_TOKEN
     read -rp "APIFY_WEBHOOK_SECRET: " APIFY_WH_SECRET
 
-    read -rp "LLM_PROVIDER [dashscope]: " LLM_PROV
-    LLM_PROV="${LLM_PROV:-dashscope}"
+    read -rp "LLM_PROVIDER [moonshot]: " LLM_PROV
+    LLM_PROV="${LLM_PROV:-moonshot}"
 
-    read -rp "DASHSCOPE_API_KEY: " DS_KEY
+    read -rp "MOONSHOT_API_KEY: " MS_KEY
+    read -rp "MOONSHOT_BASE_URL [https://api.moonshot.ai/v1]: " MS_URL
+    MS_URL="${MS_URL:-https://api.moonshot.ai/v1}"
+
+    read -rp "DEEPSEEK_API_KEY (可选，回车跳过): " DS2_KEY
+    read -rp "DASHSCOPE_API_KEY (可选，回车跳过): " DS_KEY
 
     read -rp "NGINX_SERVER_NAME [_]: " NGINX_NAME
     NGINX_NAME="${NGINX_NAME:-_}"
@@ -122,6 +127,12 @@ APIFY_WEBHOOK_SECRET=$APIFY_WH_SECRET
 
 # --- LLM ---
 LLM_PROVIDER=$LLM_PROV
+LLM_TIMEOUT=120
+LLM_FALLBACK_CHAIN=moonshot,deepseek,dashscope
+MOONSHOT_API_KEY=$MS_KEY
+MOONSHOT_BASE_URL=$MS_URL
+DEEPSEEK_API_KEY=$DS2_KEY
+DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
 DASHSCOPE_API_KEY=$DS_KEY
 
 # --- Flask & Auth ---

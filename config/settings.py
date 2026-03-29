@@ -16,34 +16,35 @@ APIFY_API_TOKEN = os.getenv("APIFY_API_TOKEN", "")
 APIFY_WEBHOOK_SECRET = os.getenv("APIFY_WEBHOOK_SECRET", "")
 
 # --- LLM (统一 OpenAI 兼容接口) ---
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "dashscope")
-LLM_MODEL = os.getenv("LLM_MODEL", "qwen3.5-plus")
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "moonshot")
+LLM_MODEL = os.getenv("LLM_MODEL", "kimi-k2.5")
 LLM_BATCH_SIZE = int(os.getenv("LLM_BATCH_SIZE", "5"))
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.1"))
 LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "4000"))
+LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "120"))
 
 PROVIDER_CONFIGS = {
-    "dashscope": {
-        "api_key": os.getenv("DASHSCOPE_API_KEY", ""),
-        "base_url": os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
-    },
     "moonshot": {
         "api_key": os.getenv("MOONSHOT_API_KEY", ""),
-        "base_url": os.getenv("MOONSHOT_BASE_URL", "https://api.moonshot.cn/v1"),
+        "base_url": os.getenv("MOONSHOT_BASE_URL", "https://api.moonshot.ai/v1"),
     },
     "deepseek": {
         "api_key": os.getenv("DEEPSEEK_API_KEY", ""),
         "base_url": os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"),
     },
+    "dashscope": {
+        "api_key": os.getenv("DASHSCOPE_API_KEY", ""),
+        "base_url": os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
+    },
 }
 
-FALLBACK_CHAIN = ["moonshot", "deepseek", "dashscope"]
+FALLBACK_CHAIN = os.getenv("LLM_FALLBACK_CHAIN", "moonshot,deepseek,dashscope").split(",")
 
 # --- LLM provider-specific model overrides ---
 PROVIDER_MODELS = {
-    "dashscope": os.getenv("DASHSCOPE_MODEL", "qwen3.5-plus"),
     "moonshot": os.getenv("MOONSHOT_MODEL", "kimi-k2.5"),
     "deepseek": os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+    "dashscope": os.getenv("DASHSCOPE_MODEL", "qwen3.5-plus"),
 }
 
 # --- Flask ---

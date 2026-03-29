@@ -10,13 +10,14 @@ import json
 import logging
 from datetime import date
 
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, AuthenticationError, PermissionDeniedError
 
 from config.settings import (
     FALLBACK_CHAIN,
     LLM_BATCH_SIZE,
     LLM_MAX_TOKENS,
     LLM_TEMPERATURE,
+    LLM_TIMEOUT,
     PROVIDER_CONFIGS,
     PROVIDER_MODELS,
 )
@@ -61,11 +62,11 @@ class LLMClient:
     def __init__(self, provider: str):
         cfg = PROVIDER_CONFIGS.get(provider, {})
         self.provider = provider
-        self.model = PROVIDER_MODELS.get(provider, "gpt-3.5-turbo")
+        self.model = PROVIDER_MODELS.get(provider, "kimi-k2.5")
         self._client = AsyncOpenAI(
             api_key=cfg.get("api_key", "sk-placeholder"),
-            base_url=cfg.get("base_url", "https://api.openai.com/v1"),
-            timeout=60.0,
+            base_url=cfg.get("base_url", "https://api.moonshot.ai/v1"),
+            timeout=LLM_TIMEOUT,
         )
 
     # Kimi K2.5 only accepts temperature=1; other providers use LLM_TEMPERATURE.
@@ -102,11 +103,14 @@ class AIFilter:
         self._fallback_chain = list(FALLBACK_CHAIN)
         for provider in self._fallback_chain:
             cfg = PROVIDER_CONFIGS.get(provider, {})
-            if cfg.get("api_key"):
+            key = cfg.get("api_key", "")
+            if key and "CHANGE_ME" not in key and key != "sk-placeholder":
                 self._clients[provider] = LLMClient(provider)
 
     def _get_client_chain(self) -> list[LLMClient]:
         return [self._clients[p] for p in self._fallback_chain if p in self._clients]
+
+    _NO_RETRY_ERRORS = (AuthenticationError, PermissionDeniedError)
 
     async def _call_with_retry(self, messages: list[dict], max_retries: int = 3) -> dict:
         """Call LLM with exponential backoff and provider fallback."""
@@ -120,6 +124,15 @@ class AIFilter:
                 try:
                     async with self._semaphore:
                         return await client.chat(messages)
+                except self._NO_RETRY_ERRORS as e:
+                    logger.warning(
+                        "Provider %s auth failed (HTTP %s), skipping: %s",
+                        client.provider,
+                        getattr(e, "status_code", "?"),
+                        e,
+                    )
+                    last_error = e
+                    break
                 except Exception as e:
                     last_error = e
                     wait = 2 ** attempt
@@ -128,7 +141,10 @@ class AIFilter:
                         client.provider, attempt + 1, e, wait,
                     )
                     await asyncio.sleep(wait)
-            logger.error("Provider %s exhausted retries, trying next", client.provider)
+            else:
+                logger.error("Provider %s exhausted retries, trying next", client.provider)
+                continue
+            logger.error("Provider %s skipped due to non-retryable error", client.provider)
 
         raise RuntimeError(f"All providers failed. Last error: {last_error}")
 
