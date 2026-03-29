@@ -1,7 +1,7 @@
 """Level 3 国产大模型 Bio 过滤 — 处理规则快筛未覆盖的灰区 BIO (~30%).
 
 所有模型统一通过 OpenAI SDK 兼容接口调用，仅切换 base_url + api_key + model。
-支持 Kimi K2.5 / Qwen3.5-Plus / DeepSeek / 智谱 GLM / MiniMax 五 provider。
+支持 Qwen3.5-Plus / Kimi K2.5 / DeepSeek 三 provider。
 利用长上下文 (256K) 一次批量处理 50 条 Bio。
 """
 
@@ -65,13 +65,20 @@ class LLMClient:
         self._client = AsyncOpenAI(
             api_key=cfg.get("api_key", "sk-placeholder"),
             base_url=cfg.get("base_url", "https://api.openai.com/v1"),
+            timeout=60.0,
         )
 
+    # Kimi K2.5 only accepts temperature=1; other providers use LLM_TEMPERATURE.
+    _FORCED_TEMPERATURE = {"moonshot": 1.0}
+
     async def chat(self, messages: list[dict], **kwargs) -> dict:
+        temp = self._FORCED_TEMPERATURE.get(
+            self.provider, kwargs.get("temperature", LLM_TEMPERATURE)
+        )
         resp = await self._client.chat.completions.create(
             model=self.model,
             messages=messages,
-            temperature=kwargs.get("temperature", LLM_TEMPERATURE),
+            temperature=temp,
             max_tokens=kwargs.get("max_tokens", LLM_MAX_TOKENS),
         )
         content = resp.choices[0].message.content or ""

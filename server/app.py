@@ -64,7 +64,7 @@ def create_app():
         user = result["user"]
         now = datetime.now(timezone.utc)
         payload = {
-            "sub": user["id"],
+            "sub": str(user["id"]),
             "role": user["role"],
             "iat": now,
             "exp": now + timedelta(hours=app.config["JWT_EXPIRY_HOURS"]),

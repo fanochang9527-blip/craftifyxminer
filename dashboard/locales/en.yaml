@@ -7,7 +7,7 @@ app:
     **Navigation** (sidebar):
     - **Home** — Welcome & overview
     - **Daily Report** — Daily discovery report
-    - **Candidates** — Candidate browsing & BD decisions
+    - **BD Review** — BD review workbench
     - **Outreach** — Contact tracking & sales feedback
     - **Cost Monitor** — Cost monitoring panel
   logout: "Logout"
@@ -15,7 +15,7 @@ app:
 
 nav:
   daily_report: "Daily Report"
-  candidates: "Candidates"
+  candidates: "BD Review"
   outreach: "Outreach"
   cost_monitor: "Cost Monitor"
   admin: "Admin"
@@ -35,7 +35,7 @@ daily:
   strategy_dist: "Discovery Strategy Distribution"
 
 candidates:
-  title: "👤 Candidate Browsing & BD Decisions"
+  title: "🎯 BD Review Workbench"
   filter_header: "Filters"
   centrality: "Centrality"
   sps_range: "SPS Range"
@@ -43,18 +43,31 @@ candidates:
   strategy: "Discovery Strategy"
   bd_status: "BD Status"
   match_count: "{count} candidates match filters"
+  col_creator: "Creator"
+  col_signals: "Key Signals"
+  col_source: "Source"
+  col_actions: "Actions"
   type_label: "Type"
   followers_label: "Followers"
   strategy_label: "Strategy"
   seed_connections_label: "Seed Connections"
   merch_exp: "✅ Has merchandise experience"
-  btn_interested: "✅ Interested"
-  btn_rejected: "❌ Rejected"
-  btn_deferred: "⏸️ Deferred"
+  sig_has_merch: "Has merch"
+  sig_shop_link: "Shop link"
+  sig_no_monetization: "No monetization"
+  sig_low_confidence: "Low confidence"
+  badge_high_sps: "SPS ≥ 75"
+  btn_interested: "Interested"
+  btn_rejected: "Rejected"
+  btn_flag: "Flag"
+  btn_deferred: "Deferred"
   marked_interested: "Marked as Interested"
   marked_rejected: "Marked as Rejected"
+  marked_flagged: "Flagged for review"
   marked_deferred: "Marked as Deferred"
+  detail_radar: "Details & Radar"
   note_placeholder: "Add a note..."
+  sps_pending: "SPS pending"
 
 outreach:
   title: "📞 Contact Tracking & Sales Feedback"

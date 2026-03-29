@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 def _decode_token(token: str) -> dict | None:
     try:
         payload = jwt.decode(token, current_app.config["JWT_SECRET_KEY"], algorithms=["HS256"])
-        user = fetch_one("SELECT * FROM users WHERE id = %s AND is_active = true", (payload["sub"],))
+        user = fetch_one("SELECT * FROM users WHERE id = %s AND is_active = true", (int(payload["sub"]),))
         if not user:
             return None
         pwd_changed = user.get("password_changed_at")

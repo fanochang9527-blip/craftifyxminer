@@ -7,7 +7,7 @@ app:
     **导航页面** (侧边栏):
     - **首页** — 欢迎与说明
     - **每日报告** — 每日发现报告
-    - **候选人** — 候选人浏览与 BD 判定
+    - **BD 审核** — BD 审核工作台
     - **联系追踪** — 联系追踪与销售反馈
     - **成本监控** — 成本监控面板
   logout: "退出登录"
@@ -15,7 +15,7 @@ app:
 
 nav:
   daily_report: "每日报告"
-  candidates: "候选人"
+  candidates: "BD 审核"
   outreach: "联系追踪"
   cost_monitor: "成本监控"
   admin: "管理面板"
@@ -35,7 +35,7 @@ daily:
   strategy_dist: "发现策略分布"
 
 candidates:
-  title: "👤 候选人浏览与 BD 判定"
+  title: "🎯 BD 审核工作台"
   filter_header: "筛选条件"
   centrality: "中心度"
   sps_range: "SPS 范围"
@@ -43,18 +43,31 @@ candidates:
   strategy: "发现策略"
   bd_status: "BD 状态"
   match_count: "共 {count} 个候选人匹配筛选条件"
+  col_creator: "创作者"
+  col_signals: "关键信号"
+  col_source: "来源"
+  col_actions: "操作"
   type_label: "类型"
   followers_label: "粉丝数"
   strategy_label: "策略"
   seed_connections_label: "种子关联"
   merch_exp: "✅ 有商品化经验"
-  btn_interested: "✅ 感兴趣"
-  btn_rejected: "❌ 拒绝"
-  btn_deferred: "⏸️ 暂缓"
+  sig_has_merch: "有商品化"
+  sig_shop_link: "商店链接"
+  sig_no_monetization: "无变现"
+  sig_low_confidence: "置信度低"
+  badge_high_sps: "SPS ≥ 75"
+  btn_interested: "感兴趣"
+  btn_rejected: "拒绝"
+  btn_flag: "标记"
+  btn_deferred: "暂缓"
   marked_interested: "已标记为感兴趣"
   marked_rejected: "已标记为拒绝"
+  marked_flagged: "已标记关注"
   marked_deferred: "已标记为暂缓"
+  detail_radar: "详情 & 雷达图"
   note_placeholder: "添加备注..."
+  sps_pending: "SPS 待计算"
 
 outreach:
   title: "📞 联系追踪与销售反馈"

@@ -18,9 +18,9 @@ APIFY_WEBHOOK_SECRET = os.getenv("APIFY_WEBHOOK_SECRET", "")
 # --- LLM (统一 OpenAI 兼容接口) ---
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "dashscope")
 LLM_MODEL = os.getenv("LLM_MODEL", "qwen3.5-plus")
-LLM_BATCH_SIZE = int(os.getenv("LLM_BATCH_SIZE", "50"))
+LLM_BATCH_SIZE = int(os.getenv("LLM_BATCH_SIZE", "5"))
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.1"))
-LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "2000"))
+LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "4000"))
 
 PROVIDER_CONFIGS = {
     "dashscope": {
@@ -35,25 +35,15 @@ PROVIDER_CONFIGS = {
         "api_key": os.getenv("DEEPSEEK_API_KEY", ""),
         "base_url": os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"),
     },
-    "zhipu": {
-        "api_key": os.getenv("ZHIPU_API_KEY", ""),
-        "base_url": os.getenv("ZHIPU_BASE_URL", "https://open.bigmodel.cn/api/paas/v4"),
-    },
-    "minimax": {
-        "api_key": os.getenv("MINIMAX_API_KEY", ""),
-        "base_url": os.getenv("MINIMAX_BASE_URL", "https://api.minimax.chat/v1"),
-    },
 }
 
-FALLBACK_CHAIN = ["moonshot", "dashscope", "deepseek", "zhipu", "minimax"]
+FALLBACK_CHAIN = ["moonshot", "deepseek", "dashscope"]
 
 # --- LLM provider-specific model overrides ---
 PROVIDER_MODELS = {
-    "moonshot": os.getenv("MOONSHOT_MODEL", "kimi-k2.5"),
     "dashscope": os.getenv("DASHSCOPE_MODEL", "qwen3.5-plus"),
-    "deepseek": os.getenv("DEEPSEEK_MODEL", "deepseek-v3.2"),
-    "zhipu": os.getenv("ZHIPU_MODEL", "glm-4-flash"),
-    "minimax": os.getenv("MINIMAX_MODEL", "MiniMax-Text-01"),
+    "moonshot": os.getenv("MOONSHOT_MODEL", "kimi-k2.5"),
+    "deepseek": os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
 }
 
 # --- Flask ---

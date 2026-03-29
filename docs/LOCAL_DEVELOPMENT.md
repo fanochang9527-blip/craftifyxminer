@@ -298,6 +298,15 @@ print("scored rows:", score_all_pending())
 PY
 ```
 
+### 7.3 使用仓库脚本批量补算（推荐）
+
+与上文内联 Python 等价，且默认最多循环 5 轮直到本轮无新增：
+
+```bash
+python scripts/backfill_features_sps.py
+python scripts/backfill_features_sps.py --max-rounds 5
+```
+
 说明：`compute_all_pending()` 只处理**至少有一条 tweet 且尚无 `creator_features` 行**的创作者；若你刚插入 tweet，跑一遍即可。
 
 ---
@@ -389,4 +398,5 @@ streamlit run dashboard/app.py --server.port 8501 --server.address 127.0.0.1
 | [db/schema.sql](../db/schema.sql) | 表结构 |
 | [db/indexes.sql](../db/indexes.sql) | 索引 |
 | [pipeline/seed_import.py](../pipeline/seed_import.py) | 种子 CSV 导入 |
+| [scripts/backfill_features_sps.py](../scripts/backfill_features_sps.py) | 批量补算 `creator_features` 与 SPS（见第七节） |
 | [tests/](../tests/) | pytest 用例（含 `test_ai_filter` 等） |
