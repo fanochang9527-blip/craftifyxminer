@@ -8,7 +8,7 @@ import httpx
 import pytest
 from openai import APIStatusError
 
-from pipeline.ai_filter import AIFilter, LLMClient, SYSTEM_PROMPT, _is_non_retryable_auth_error
+from pipeline.ai_filter import AIFilter, LLMClient, SYSTEM_PROMPT, _is_non_retryable_auth_error, _parse_json_lenient
 
 
 class TestLLMClient:
@@ -142,3 +142,22 @@ def test_is_non_retryable_auth_error_detects_api_status_401():
     req = httpx.Request("POST", "https://x")
     e = APIStatusError("x", response=httpx.Response(401, request=req), body=None)
     assert _is_non_retryable_auth_error(e) is True
+
+
+class TestParseJsonLenient:
+    def test_valid_json(self):
+        text = '[{"bio_id": 1, "result": "YES"}]'
+        assert _parse_json_lenient(text) == [{"bio_id": 1, "result": "YES"}]
+
+    def test_truncated_json_salvages_complete_objects(self):
+        text = '[{"bio_id": 1, "result": "YES"}, {"bio_id": 2, "result": "NO"}, {"bio_id": 3, "res'
+        result = _parse_json_lenient(text)
+        assert len(result) == 2
+        assert result[0]["bio_id"] == 1
+        assert result[1]["bio_id"] == 2
+
+    def test_empty_string_returns_none(self):
+        assert _parse_json_lenient("") is None
+
+    def test_completely_invalid_returns_none(self):
+        assert _parse_json_lenient("not json at all") is None

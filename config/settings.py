@@ -20,7 +20,7 @@ LLM_PROVIDER = os.getenv("LLM_PROVIDER", "moonshot")
 LLM_MODEL = os.getenv("LLM_MODEL", "kimi-k2.5")
 LLM_BATCH_SIZE = int(os.getenv("LLM_BATCH_SIZE", "5"))
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.1"))
-LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "4000"))
+LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "16384"))
 LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "120"))
 
 PROVIDER_CONFIGS = {

@@ -101,6 +101,47 @@ def _is_non_retryable_auth_error(exc: BaseException) -> bool:
     return False
 
 
+def _parse_json_lenient(text: str) -> list[dict] | None:
+    """Try to parse a JSON array; if truncated, salvage complete objects."""
+    text = text.strip()
+    if not text:
+        return None
+
+    try:
+        result = json.loads(text)
+        return result if isinstance(result, list) else None
+    except json.JSONDecodeError:
+        pass
+
+    # Response was likely truncated by max_tokens — extract complete {...} objects
+    salvaged: list[dict] = []
+    depth = 0
+    start = -1
+    for i, ch in enumerate(text):
+        if ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0 and start >= 0:
+                try:
+                    obj = json.loads(text[start : i + 1])
+                    salvaged.append(obj)
+                except json.JSONDecodeError:
+                    pass
+                start = -1
+
+    if salvaged:
+        logger.warning(
+            "Salvaged %d/%d+ objects from truncated LLM response",
+            len(salvaged), len(salvaged),
+        )
+        return salvaged
+
+    return None
+
+
 class AIFilter:
     """Level 3 AI filter with batch processing, fallback chain, and cost tracking."""
 
@@ -175,9 +216,8 @@ class AIFilter:
         if content.startswith("```"):
             content = content.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
 
-        try:
-            results = json.loads(content)
-        except json.JSONDecodeError:
+        results = _parse_json_lenient(content)
+        if results is None:
             logger.error("Failed to parse LLM response as JSON: %s", content[:200])
             results = [
                 {"bio_id": b["id"], "result": "NO", "type": None, "confidence": 0.0}
