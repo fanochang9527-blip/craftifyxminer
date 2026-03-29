@@ -122,6 +122,31 @@ def run_filter_pipeline(usernames: set[str] | None = None) -> dict:
     return stats
 
 
+def tag_discovery_source(
+    usernames: set[str],
+    strategy: str,
+    anchor_seed: str | None = None,
+    discovered_via: str | None = None,
+) -> int:
+    """回写 discovery_strategy / anchor_seed / discovered_via（仅更新尚未标记的行）。"""
+    if not usernames:
+        return 0
+    with get_cursor() as cur:
+        cur.execute(
+            """UPDATE creators
+               SET discovery_strategy = %s,
+                   anchor_seed = %s,
+                   discovered_via = %s
+               WHERE username = ANY(%s)
+                 AND discovery_strategy IS NULL""",
+            (strategy, anchor_seed, discovered_via, list(usernames)),
+        )
+        count = cur.rowcount
+    if count:
+        logger.info("Tagged %d creators: strategy=%s, anchor=%s", count, strategy, anchor_seed)
+    return count
+
+
 def process_dataset(client: ApifyClient, dataset_id: str) -> dict:
     """Fetch dataset from Apify, store items, and run filter pipeline.
 

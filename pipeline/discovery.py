@@ -175,8 +175,41 @@ def trigger_l1_scan(
     dataset_id = run.get("defaultDatasetId")
     stored = {}
     if dataset_id:
-        from pipeline.intake import process_dataset
+        from pipeline.intake import process_dataset, tag_discovery_source
         stored = process_dataset(client, dataset_id)
         logger.info("L1 results processed: %s", stored)
 
+        new_usernames = stored.get("store", {}).get("usernames", set())
+        if not new_usernames:
+            all_usernames = set()
+            for item in client.dataset(dataset_id).iterate_items():
+                u = (item.get("username") or item.get("screen_name")
+                     or item.get("userName") or "")
+                if u:
+                    all_usernames.add(u.lstrip("@").lower())
+            new_usernames = all_usernames
+
+        _tag_batch(anchors, new_usernames, run_id)
+
     return {"runs_started": 1, "budget_ok": True, "run_id": run_id, "stored": stored}
+
+
+def _tag_batch(anchors: list[dict], usernames: set[str], run_id: str) -> None:
+    """Tag newly discovered creators with strategy/anchor from this batch."""
+    from collections import Counter
+    from pipeline.intake import tag_discovery_source
+
+    strategies = Counter(a["strategy"] for a in anchors if not a["username"].startswith("#"))
+    primary_strategy = strategies.most_common(1)[0][0] if strategies else "seed_following"
+
+    seed_handles = [a["username"] for a in anchors if not a["username"].startswith("#")]
+    anchor_label = ", ".join(f"@{h}" for h in seed_handles[:5])
+    if len(seed_handles) > 5:
+        anchor_label += f" (+{len(seed_handles) - 5})"
+
+    tag_discovery_source(
+        usernames=usernames,
+        strategy=primary_strategy,
+        anchor_seed=anchor_label,
+        discovered_via=f"l1_batch:{run_id}",
+    )
