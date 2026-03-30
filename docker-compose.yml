@@ -43,7 +43,7 @@ services:
 
   cron:
     build: .
-    command: python cron/daily_job.py
+    command: python -m cron.daily_job
     restart: unless-stopped
     depends_on:
       db:
