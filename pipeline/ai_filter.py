@@ -8,6 +8,7 @@
 import asyncio
 import json
 import logging
+import time
 from datetime import date
 
 from openai import APIStatusError, AsyncOpenAI, AuthenticationError, PermissionDeniedError
@@ -56,6 +57,29 @@ Return ONLY a JSON array (no markdown fences) like:
 """
 
 
+class _RateLimiter:
+    """Sliding-window rate limiter: at most *rpm* requests per 60 s."""
+
+    def __init__(self, rpm: int = 150):
+        self._rpm = rpm
+        self._timestamps: list[float] = []
+        self._lock = asyncio.Lock()
+
+    async def acquire(self) -> None:
+        async with self._lock:
+            now = time.monotonic()
+            window_start = now - 60.0
+            self._timestamps = [t for t in self._timestamps if t > window_start]
+            if len(self._timestamps) >= self._rpm:
+                sleep_for = self._timestamps[0] - window_start + 0.1
+                logger.info("Rate limiter: sleeping %.1fs (hit %d RPM cap)", sleep_for, self._rpm)
+                await asyncio.sleep(sleep_for)
+            self._timestamps.append(time.monotonic())
+
+
+_rate_limiter = _RateLimiter(rpm=150)
+
+
 class LLMClient:
     """Unified async client for any OpenAI-compatible provider."""
 
@@ -67,12 +91,13 @@ class LLMClient:
             api_key=cfg.get("api_key", "sk-placeholder"),
             base_url=cfg.get("base_url", "https://api.moonshot.ai/v1"),
             timeout=LLM_TIMEOUT,
+            max_retries=0,
         )
 
-    # Kimi K2.5 only accepts temperature=1; other providers use LLM_TEMPERATURE.
     _FORCED_TEMPERATURE = {"moonshot": 1.0}
 
     async def chat(self, messages: list[dict], **kwargs) -> dict:
+        await _rate_limiter.acquire()
         temp = self._FORCED_TEMPERATURE.get(
             self.provider, kwargs.get("temperature", LLM_TEMPERATURE)
         )
@@ -98,6 +123,12 @@ def _is_non_retryable_auth_error(exc: BaseException) -> bool:
     if isinstance(exc, APIStatusError):
         code = getattr(exc, "status_code", None)
         return code in (401, 403)
+    return False
+
+
+def _is_overloaded_or_ratelimit(exc: BaseException) -> bool:
+    if isinstance(exc, APIStatusError) and getattr(exc, "status_code", None) == 429:
+        return True
     return False
 
 
@@ -147,7 +178,7 @@ class AIFilter:
 
     def __init__(self, batch_size: int = LLM_BATCH_SIZE):
         self.batch_size = batch_size
-        self._semaphore = asyncio.Semaphore(10)
+        self._semaphore = asyncio.Semaphore(3)
         self._clients: dict[str, LLMClient] = {}
         # Freeze fallback order at construction time so tests/runtime are stable
         # even if module-level config is patched or reloaded later.
@@ -161,7 +192,7 @@ class AIFilter:
     def _get_client_chain(self) -> list[LLMClient]:
         return [self._clients[p] for p in self._fallback_chain if p in self._clients]
 
-    async def _call_with_retry(self, messages: list[dict], max_retries: int = 3) -> dict:
+    async def _call_with_retry(self, messages: list[dict], max_retries: int = 4) -> dict:
         """Call LLM with exponential backoff and provider fallback."""
         clients = self._get_client_chain()
         if not clients:
@@ -183,10 +214,13 @@ class AIFilter:
                             e,
                         )
                         break
-                    wait = 2 ** attempt
+                    if _is_overloaded_or_ratelimit(e):
+                        wait = (attempt + 1) * 10
+                    else:
+                        wait = 2 ** attempt
                     logger.warning(
-                        "Provider %s attempt %d failed: %s. Retrying in %ds",
-                        client.provider, attempt + 1, e, wait,
+                        "Provider %s attempt %d/%d failed: %s. Retrying in %ds",
+                        client.provider, attempt + 1, max_retries, e, wait,
                     )
                     await asyncio.sleep(wait)
             else:
