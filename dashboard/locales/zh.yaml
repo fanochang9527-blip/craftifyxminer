@@ -46,6 +46,7 @@ candidates:
   col_creator: "创作者"
   col_signals: "关键信号"
   col_source: "来源"
+  col_discovered: "发现时间"
   col_actions: "操作"
   type_label: "类型"
   followers_label: "粉丝数"
@@ -68,6 +69,8 @@ candidates:
   detail_radar: "详情 & 雷达图"
   note_placeholder: "添加备注..."
   sps_pending: "SPS 待计算"
+  per_page: "每页条数"
+  page_info: "第 {page}/{total_pages} 页，共 {total} 条"
 
 outreach:
   title: "📞 联系追踪与销售反馈"

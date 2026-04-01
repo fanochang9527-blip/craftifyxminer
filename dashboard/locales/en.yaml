@@ -46,6 +46,7 @@ candidates:
   col_creator: "Creator"
   col_signals: "Key Signals"
   col_source: "Source"
+  col_discovered: "Discovered"
   col_actions: "Actions"
   type_label: "Type"
   followers_label: "Followers"
@@ -68,6 +69,8 @@ candidates:
   detail_radar: "Details & Radar"
   note_placeholder: "Add a note..."
   sps_pending: "SPS pending"
+  per_page: "Per page"
+  page_info: "Page {page}/{total_pages}, {total} total"
 
 outreach:
   title: "📞 Contact Tracking & Sales Feedback"

@@ -12,18 +12,37 @@ if not require_login():
     st.stop()
 
 from dashboard.i18n import t
-from db.connection import fetch_all, get_cursor
+from db.connection import fetch_all, fetch_one, get_cursor
 from dashboard.components.radar_chart import create_radar_chart
+from dashboard.candidates_query import (
+    BD_STATUS_OPTS,
+    CENTRALITY_OPTS,
+    CREATOR_TYPE_OPTS,
+    STRATEGY_OPTS,
+    build_where_clauses,
+    calc_pagination,
+)
+
+
+def _render_pagination_controls(
+    *, page: int, total_pages: int, total_count: int, key_prefix: str
+) -> None:
+    pag_cols = st.columns([3, 2, 2, 3])
+    with pag_cols[0]:
+        st.caption(t("candidates.page_info", page=page, total_pages=total_pages, total=total_count))
+    with pag_cols[1]:
+        if st.button("⬅️", disabled=(page <= 1), key=f"prev_{key_prefix}"):
+            st.session_state["candidates_page"] = page - 1
+            st.rerun()
+    with pag_cols[2]:
+        if st.button("➡️", disabled=(page >= total_pages), key=f"next_{key_prefix}"):
+            st.session_state["candidates_page"] = page + 1
+            st.rerun()
+
 
 # ---------------------------------------------------------------------------
 # Sidebar filters
 # ---------------------------------------------------------------------------
-
-_CENTRALITY_OPTS = ["Hub", "Connector", "Peripheral"]
-_CREATOR_TYPE_OPTS = ["oc_creator", "vtuber", "fan_artist", "game_creator", "content_creator"]
-_STRATEGY_OPTS = ["seed_following", "geo_explore", "hashtag_explore", "time_explore"]
-_BD_STATUS_OPTS = ["all", "ai_passed", "rule_passed", "pending", "interested", "rejected", "deferred"]
-
 
 def _opt(prefix: str):
     return lambda v: t(f"options.{prefix}.{v}")
@@ -33,55 +52,66 @@ with st.sidebar:
     st.header(t("candidates.filter_header"))
     centrality_filter = st.multiselect(
         t("candidates.centrality"),
-        _CENTRALITY_OPTS,
-        default=_CENTRALITY_OPTS,
+        CENTRALITY_OPTS,
+        default=CENTRALITY_OPTS,
         format_func=_opt("centrality"),
     )
     sps_min, sps_max = st.slider(t("candidates.sps_range"), 0, 100, (0, 100))
     creator_types = st.multiselect(
         t("candidates.creator_type"),
-        _CREATOR_TYPE_OPTS,
-        default=_CREATOR_TYPE_OPTS,
+        CREATOR_TYPE_OPTS,
+        default=CREATOR_TYPE_OPTS,
         format_func=_opt("creator_type"),
     )
     strategy_filter = st.multiselect(
         t("candidates.strategy"),
-        _STRATEGY_OPTS,
+        STRATEGY_OPTS,
         format_func=_opt("strategy"),
     )
     bd_status_filter = st.selectbox(
         t("candidates.bd_status"),
-        _BD_STATUS_OPTS,
+        BD_STATUS_OPTS,
         index=0,
         format_func=_opt("bd_status"),
+    )
+
+    st.markdown("---")
+    per_page = st.selectbox(
+        t("candidates.per_page"),
+        [10, 20, 50, 100],
+        index=1,
     )
 
 # ---------------------------------------------------------------------------
 # Build query
 # ---------------------------------------------------------------------------
 
-where_clauses: list[str] = ["c.is_seed = false", "cs.sps_score IS NOT NULL", "cs.sps_score BETWEEN %s AND %s"]
-params: list = [sps_min, sps_max]
+where_sql, params = build_where_clauses(
+    centrality=centrality_filter,
+    creator_types=creator_types,
+    strategy=strategy_filter,
+    bd_status=bd_status_filter,
+    sps_min=sps_min,
+    sps_max=sps_max,
+)
 
-if centrality_filter:
-    where_clauses.append("cs.centrality_tier = ANY(%s)")
-    params.append(centrality_filter)
-if creator_types:
-    where_clauses.append("cs.creator_type = ANY(%s)")
-    params.append(creator_types)
-if strategy_filter:
-    where_clauses.append("c.discovery_strategy = ANY(%s)")
-    params.append(strategy_filter)
-if bd_status_filter != "all":
-    where_clauses.append("c.bd_status = %s")
-    params.append(bd_status_filter)
+count_query = f"""
+    SELECT COUNT(*) AS cnt
+    FROM creators c
+    JOIN creator_scores cs ON cs.creator_id = c.id
+    LEFT JOIN creator_features cf ON cf.creator_id = c.id
+    WHERE {where_sql}
+"""
+total_row = fetch_one(count_query, tuple(params))
+total_count = total_row["cnt"] if total_row else 0
 
-where_sql = " AND ".join(where_clauses)
+page = st.session_state.get("candidates_page", 1)
+offset, total_pages = calc_pagination(total_count, page, per_page)
 
 query = f"""
     SELECT c.id, c.username, c.bio, c.followers, c.bd_status, c.bd_decision,
            c.discovery_strategy, c.has_merch_experience, c.website,
-           c.anchor_seed, c.discovered_via,
+           c.anchor_seed, c.discovered_via, c.discovered_date,
            cs.sps_score, cs.centrality_tier, cs.creator_type, cs.seed_connections,
            cf.audience_score, cf.engagement_score, cf.virality_score,
            cf.posting_score, cf.monetization_score, cf.growth_score,
@@ -92,10 +122,9 @@ query = f"""
     LEFT JOIN creator_features cf ON cf.creator_id = c.id
     WHERE {where_sql}
     ORDER BY cs.sps_score DESC
-    LIMIT 50
+    LIMIT %s OFFSET %s
 """
-
-candidates = fetch_all(query, tuple(params))
+candidates = fetch_all(query, tuple(params) + (per_page, offset))
 
 # ---------------------------------------------------------------------------
 # Title + summary badges
@@ -115,7 +144,15 @@ with badge_cols[1]:
 with badge_cols[2]:
     st.metric(label=t("candidates.badge_high_sps"), value=high_sps_count)
 with badge_cols[3]:
-    st.markdown(f"**{t('candidates.match_count', count=len(candidates))}**")
+    st.markdown(f"**{t('candidates.match_count', count=total_count)}**")
+
+# ---------------------------------------------------------------------------
+# Pagination controls (top)
+# ---------------------------------------------------------------------------
+
+_render_pagination_controls(
+    page=page, total_pages=total_pages, total_count=total_count, key_prefix="top"
+)
 
 st.markdown("---")
 
@@ -198,13 +235,14 @@ def _build_source(c: dict) -> str:
 # Table header
 # ---------------------------------------------------------------------------
 
-header_cols = st.columns([2, 1.2, 0.8, 4, 2, 2.5])
+header_cols = st.columns([2, 1.2, 0.8, 3, 1.2, 1, 2.5])
 header_cols[0].markdown(f"**{t('candidates.col_creator')}**")
 header_cols[1].markdown(f"**{t('candidates.centrality')}**")
 header_cols[2].markdown(f"**SPS**")
 header_cols[3].markdown(f"**{t('candidates.col_signals')}**")
 header_cols[4].markdown(f"**{t('candidates.col_source')}**")
-header_cols[5].markdown(f"**{t('candidates.col_actions')}**")
+header_cols[5].markdown(f"**{t('candidates.col_discovered')}**")
+header_cols[6].markdown(f"**{t('candidates.col_actions')}**")
 st.markdown("---")
 
 # ---------------------------------------------------------------------------
@@ -218,8 +256,10 @@ for c in candidates:
     sps = float(c.get("sps_score") or 0)
     signals = _build_signals(c)
     source = _build_source(c)
+    disc_date = c.get("discovered_date")
+    disc_str = disc_date.strftime("%m-%d") if disc_date else "—"
 
-    row_cols = st.columns([2, 1.2, 0.8, 4, 2, 2.5])
+    row_cols = st.columns([2, 1.2, 0.8, 3, 1.2, 1, 2.5])
 
     with row_cols[0]:
         st.markdown(f"[@{c['username']}](https://x.com/{c['username']})")
@@ -237,6 +277,9 @@ for c in candidates:
         st.caption(source)
 
     with row_cols[5]:
+        st.caption(disc_str)
+
+    with row_cols[6]:
         bcols = st.columns(4)
         with bcols[0]:
             if st.button("✅", key=f"int_{cid}", help=t("candidates.btn_interested")):
@@ -305,3 +348,12 @@ for c in candidates:
             st.plotly_chart(fig, use_container_width=True, key=f"radar_{cid}")
 
     st.markdown("<hr style='margin:2px 0;border-color:#333'>", unsafe_allow_html=True)
+
+# ---------------------------------------------------------------------------
+# Pagination controls (bottom)
+# ---------------------------------------------------------------------------
+
+st.markdown("---")
+_render_pagination_controls(
+    page=page, total_pages=total_pages, total_count=total_count, key_prefix="bottom"
+)
