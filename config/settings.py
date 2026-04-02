@@ -20,8 +20,16 @@ LLM_PROVIDER = os.getenv("LLM_PROVIDER", "moonshot")
 LLM_MODEL = os.getenv("LLM_MODEL", "kimi-k2.5")
 LLM_BATCH_SIZE = int(os.getenv("LLM_BATCH_SIZE", "5"))
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.1"))
-LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "16384"))
+# 全局默认；各厂商实际上限见 PROVIDER_MAX_OUTPUT_TOKENS（DeepSeek 等为 8192）
+LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "8192"))
 LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "120"))
+
+# 各 OpenAI 兼容厂商的 completion 上限不同；ai_filter 会取 min(LLM_MAX_TOKENS, cap)
+PROVIDER_MAX_OUTPUT_TOKENS = {
+    "moonshot": 16384,
+    "deepseek": 8192,
+    "dashscope": 8192,
+}
 
 PROVIDER_CONFIGS = {
     "moonshot": {

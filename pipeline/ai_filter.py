@@ -20,6 +20,7 @@ from config.settings import (
     LLM_TEMPERATURE,
     LLM_TIMEOUT,
     PROVIDER_CONFIGS,
+    PROVIDER_MAX_OUTPUT_TOKENS,
     PROVIDER_MODELS,
 )
 
@@ -101,11 +102,15 @@ class LLMClient:
         temp = self._FORCED_TEMPERATURE.get(
             self.provider, kwargs.get("temperature", LLM_TEMPERATURE)
         )
+        requested = int(kwargs.get("max_tokens", LLM_MAX_TOKENS))
+        cap = PROVIDER_MAX_OUTPUT_TOKENS.get(self.provider, 8192)
+        # DeepSeek 等要求 max_tokens ∈ [1, 8192]；全局 LLM_MAX_TOKENS 可能为 16384（给 Kimi 用）
+        max_tokens = max(1, min(requested, cap))
         resp = await self._client.chat.completions.create(
             model=self.model,
             messages=messages,
             temperature=temp,
-            max_tokens=kwargs.get("max_tokens", LLM_MAX_TOKENS),
+            max_tokens=max_tokens,
         )
         content = resp.choices[0].message.content or ""
         usage = {
