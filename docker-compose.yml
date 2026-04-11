@@ -20,18 +20,32 @@ services:
       retries: 5
 
   server:
-    build: .
+    build:
+      context: .
+      args:
+        PYTHON_BASE: ${PYTHON_BASE:-python:3.11-slim-bookworm}
+        APT_USE_MIRROR: ${APT_USE_MIRROR:-1}
     command: gunicorn -w 2 -b 0.0.0.0:5000 server.app:app
     restart: unless-stopped
+    # 宿主机端口用 FLASK_PORT；容器内仍为 5000。macOS 上 5000 常被 AirPlay 占用，见 .env.example
     ports:
-      - "5000:5000"
+      - "${FLASK_PORT:-5000}:5000"
     depends_on:
       db:
         condition: service_healthy
     env_file: .env
+    # .env 里 DATABASE_URL 多为 localhost（本机 venv）；容器内需连服务名 db
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-miner}:${DB_PASSWORD}@db:5432/${POSTGRES_DB:-craftifyx_miner}
+    volumes:
+      - model_data:/app/models
 
   dashboard:
-    build: .
+    build:
+      context: .
+      args:
+        PYTHON_BASE: ${PYTHON_BASE:-python:3.11-slim-bookworm}
+        APT_USE_MIRROR: ${APT_USE_MIRROR:-1}
     command: streamlit run dashboard/app.py --server.port=8501 --server.address=0.0.0.0
     restart: unless-stopped
     ports:
@@ -40,9 +54,15 @@ services:
       db:
         condition: service_healthy
     env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-miner}:${DB_PASSWORD}@db:5432/${POSTGRES_DB:-craftifyx_miner}
 
   cron:
-    build: .
+    build:
+      context: .
+      args:
+        PYTHON_BASE: ${PYTHON_BASE:-python:3.11-slim-bookworm}
+        APT_USE_MIRROR: ${APT_USE_MIRROR:-1}
     command: python -m cron.daily_job
     restart: unless-stopped
     depends_on:
@@ -51,6 +71,11 @@ services:
       server:
         condition: service_started
     env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-miner}:${DB_PASSWORD}@db:5432/${POSTGRES_DB:-craftifyx_miner}
+    volumes:
+      - model_data:/app/models
 
 volumes:
   pgdata:
+  model_data:

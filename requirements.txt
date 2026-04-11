@@ -1,6 +1,8 @@
 # CraftifyX Miner 6.0 — Python 依赖
 # 安装: pip install -r requirements.txt
 
+wrapt>=2.0.0
+
 # Web 框架
 flask==3.1.*
 gunicorn==23.*
@@ -27,6 +29,13 @@ plotly==6.0.*
 
 # 数据处理
 pandas==2.2.*
+openpyxl==3.1.*
+
+# ML / 评估（pipeline/sps_model、pipeline/model_monitor：Ridge、XGBoost、Spearman 等）
+numpy>=1.26,<3
+scipy>=1.11,<2
+scikit-learn>=1.4,<2
+xgboost>=2.0,<3
 
 # 配置
 pyyaml==6.0.*

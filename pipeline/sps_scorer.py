@@ -1,6 +1,10 @@
 """SPS 评分 + 中心度分层。
 
-SPS = sum(weight_i * score_i) for 10 dimensions，权重矩阵按 creator_type 从 weights.yaml 加载。
+双模型口径：
+- sellability_score/is_sellable: 是否建议联系（Model A）
+- sps_score: 预测销量评分（Model B）
+
+优先使用 ML 模型；模型不可用时 fallback 到 weighted-sum。
 中心度: seed_connections -> Hub(>=5) / Connector(2-4) / Peripheral(0-1)。
 Contact Probability: 初版 SPS*0.8 + Monetization*0.2。
 """
@@ -9,9 +13,9 @@ import logging
 
 import yaml
 
+from config.settings import SELLABILITY_SCORE_THRESHOLD, SPS_SALES_NORMALIZER
 from config.settings import WEIGHTS_PATH
 from db.connection import fetch_all, fetch_one, get_cursor
-from pipeline.feature_engine import circle_influence_score_from_seed_connections
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +71,16 @@ def classify_centrality(seed_connections: int) -> str:
 
 
 def calc_sps(features: dict, creator_type: str) -> float:
-    """Calculate SPS as weighted sum of 10 feature dimensions."""
+    """Calculate SPS score — weighted-sum fallback used by Model B."""
+    try:
+        from pipeline.sps_model import predict_sps
+        features_with_type = {**features, "creator_type": creator_type}
+        ml_score = predict_sps(features_with_type)
+        if ml_score is not None:
+            return ml_score
+    except Exception:
+        logger.debug("ML prediction failed — falling back to weighted sum")
+
     w = get_weights_for_type(creator_type)
     total = 0.0
     for fk, wk in zip(FEATURE_KEYS, WEIGHT_KEYS):
@@ -75,6 +88,43 @@ def calc_sps(features: dict, creator_type: str) -> float:
         weight = float(w.get(wk, 0) or 0)
         total += score * weight
     return round(total, 2)
+
+
+def calc_sellability(features: dict, creator_type: str) -> float:
+    """Calculate sellability score (0-100) — Model A first, heuristic fallback."""
+    try:
+        from pipeline.sellability_model import predict_sellability
+
+        score = predict_sellability({**features, "creator_type": creator_type})
+        if score is not None:
+            return float(score)
+    except Exception:
+        logger.debug("Sellability model prediction failed — using heuristic fallback")
+
+    # 冷启动启发式：偏重变现/互动/社区与数据置信度
+    monetization = float(features.get("monetization_score") or 0)
+    engagement = float(features.get("engagement_score") or 0)
+    community = float(features.get("community_score") or 0)
+    confidence = float(features.get("data_confidence") or 0)
+    heuristic = monetization * 0.4 + engagement * 0.25 + community * 0.2 + confidence * 0.15
+    return round(max(0.0, min(100.0, heuristic)), 2)
+
+
+def calc_predicted_sales(features: dict, creator_type: str) -> tuple[float, float]:
+    """Return (predicted_sales, sps_score)."""
+    try:
+        from pipeline.sps_model import predict_sales, sales_to_sps
+
+        sales = predict_sales({**features, "creator_type": creator_type})
+        if sales is not None:
+            return float(sales), float(sales_to_sps(sales))
+    except Exception:
+        logger.debug("Sales model prediction failed — using weighted fallback")
+
+    # fallback：用旧 weighted SPS 估算销量
+    sps = calc_sps(features, creator_type)
+    sales = max(0.0, float(sps) * SPS_SALES_NORMALIZER)
+    return round(sales, 2), round(float(sps), 2)
 
 
 def calc_contact_probability(sps: float, monetization: float) -> float:
@@ -92,14 +142,13 @@ def score_creator(creator_id: int) -> dict | None:
     if not features:
         return None
 
-    # Determine creator type from scores table or features
     type_row = fetch_one(
-        "SELECT creator_type FROM creator_scores WHERE creator_id = %s",
+        """SELECT COALESCE(creator_type_manual, creator_type_auto, 'unknown') AS creator_type
+           FROM creators WHERE id = %s""",
         (creator_id,),
     )
     creator_type = (type_row or {}).get("creator_type") or "content_creator"
 
-    # Seed connections for centrality
     seed_row = fetch_one(
         """SELECT COUNT(*) AS cnt FROM creator_graph cg
            JOIN creators c ON c.id = cg.creator_id
@@ -108,18 +157,26 @@ def score_creator(creator_id: int) -> dict | None:
     )
     seed_connections = int(seed_row["cnt"]) if seed_row else 0
 
-    sps = calc_sps(dict(features), creator_type)
+    sellability_score = calc_sellability(dict(features), creator_type)
+    is_sellable = sellability_score >= SELLABILITY_SCORE_THRESHOLD
+    # 不再把非 sellable 直接归零，保留预测销量与 SPS，供工作台解释与复核。
+    predicted_sales, sps = calc_predicted_sales(dict(features), creator_type)
     centrality = classify_centrality(seed_connections)
     contact_prob = calc_contact_probability(sps, float(features.get("monetization_score") or 0))
 
     with get_cursor() as cur:
         cur.execute(
             """INSERT INTO creator_scores
-                   (creator_id, creator_type, sps_score, confidence,
+                   (creator_id, creator_type, sellability_score, is_sellable, predicted_sales,
+                    sps_score, confidence,
                     centrality_tier, seed_connections,
                     contact_probability, predicted_response_rate)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                ON CONFLICT (creator_id) DO UPDATE SET
+                   creator_type = EXCLUDED.creator_type,
+                   sellability_score = EXCLUDED.sellability_score,
+                   is_sellable = EXCLUDED.is_sellable,
+                   predicted_sales = EXCLUDED.predicted_sales,
                    sps_score = EXCLUDED.sps_score,
                    centrality_tier = EXCLUDED.centrality_tier,
                    seed_connections = EXCLUDED.seed_connections,
@@ -128,6 +185,9 @@ def score_creator(creator_id: int) -> dict | None:
             (
                 creator_id,
                 creator_type,
+                sellability_score,
+                is_sellable,
+                predicted_sales,
                 sps,
                 features.get("data_confidence", 0),
                 centrality,
@@ -139,6 +199,9 @@ def score_creator(creator_id: int) -> dict | None:
 
     return {
         "creator_id": creator_id,
+        "sellability_score": sellability_score,
+        "is_sellable": is_sellable,
+        "predicted_sales": predicted_sales,
         "sps_score": sps,
         "centrality_tier": centrality,
         "seed_connections": seed_connections,
@@ -151,7 +214,9 @@ def score_all_pending() -> int:
     rows = fetch_all(
         """SELECT cf.creator_id FROM creator_features cf
            LEFT JOIN creator_scores cs ON cs.creator_id = cf.creator_id
-           WHERE cs.id IS NULL"""
+           WHERE cs.id IS NULL
+              OR cs.sellability_score IS NULL
+              OR cs.predicted_sales IS NULL"""
     )
     count = 0
     for row in rows:

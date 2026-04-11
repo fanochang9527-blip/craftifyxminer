@@ -5,7 +5,10 @@
 -- 1. creators (主档案)
 CREATE TABLE IF NOT EXISTS creators (
     id SERIAL PRIMARY KEY,
-    username TEXT UNIQUE NOT NULL,
+    username TEXT NOT NULL,
+    platform VARCHAR(64) NOT NULL DEFAULT 'twitter',
+    platform_account_id TEXT NOT NULL,
+    sales_transaction_count INTEGER DEFAULT 0,
     followers INTEGER,
     following INTEGER,
     tweets_count INTEGER,
@@ -13,7 +16,8 @@ CREATE TABLE IF NOT EXISTS creators (
     website TEXT,
     account_age INTEGER,
     is_seed BOOLEAN DEFAULT false,
-    seed_tier VARCHAR(5),
+    creator_type_manual VARCHAR(20),
+    creator_type_auto VARCHAR(20),
     total_sales FLOAT DEFAULT 0,
     has_merch_experience BOOLEAN,
     discovered_date DATE DEFAULT CURRENT_DATE,
@@ -77,6 +81,9 @@ CREATE TABLE IF NOT EXISTS creator_scores (
     id SERIAL PRIMARY KEY,
     creator_id INTEGER REFERENCES creators(id) UNIQUE,
     creator_type VARCHAR(20),
+    sellability_score FLOAT,
+    is_sellable BOOLEAN,
+    predicted_sales FLOAT,
     sps_score FLOAT,
     confidence FLOAT,
     centrality_tier VARCHAR(20),
@@ -168,3 +175,24 @@ CREATE TABLE IF NOT EXISTS login_attempts (
 );
 CREATE INDEX IF NOT EXISTS idx_login_attempts_ip ON login_attempts (ip_address, attempted_at);
 CREATE INDEX IF NOT EXISTS idx_login_attempts_user ON login_attempts (username, attempted_at);
+
+-- 12. model_evaluations (SPS 模型评估 — 与 migration 004 对齐，删库重建时一次到位)
+CREATE TABLE IF NOT EXISTS model_evaluations (
+    id SERIAL PRIMARY KEY,
+    evaluated_at TIMESTAMP DEFAULT NOW(),
+    model_version TEXT,
+    n_seeds INTEGER,
+    n_predictions INTEGER,
+    n_bd_reviewed INTEGER,
+    n_interested INTEGER,
+    n_rejected INTEGER,
+    recall FLOAT,
+    precision_score FLOAT,
+    f2_score FLOAT,
+    precision_at_250 FLOAT,
+    spearman_corr FLOAT,
+    r2 FLOAT,
+    mae FLOAT,
+    sps_threshold FLOAT,
+    notes TEXT
+);

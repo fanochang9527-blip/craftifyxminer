@@ -5,9 +5,15 @@ from __future__ import annotations
 import math
 
 CENTRALITY_OPTS = ["Hub", "Connector", "Peripheral"]
-CREATOR_TYPE_OPTS = ["oc_creator", "vtuber", "fan_artist", "game_creator", "content_creator"]
-STRATEGY_OPTS = ["seed_following", "geo_explore", "hashtag_explore", "time_explore"]
-BD_STATUS_OPTS = ["all", "ai_passed", "rule_passed", "pending", "interested", "rejected", "deferred"]
+CREATOR_TYPE_OPTS = ["oc_creator", "vtuber", "fan_artist", "game_creator", "content_creator", "unknown"]
+STRATEGY_OPTS = [
+    "seed_following",
+    "geo_explore",
+    "hashtag_explore",
+    "time_explore",
+    "legacy",
+]
+BD_STATUS_OPTS = ["all", "ai_passed", "rule_passed", "pending", "interested", "rejected_unfit", "rejected_not_creator"]
 
 
 def build_where_clauses(
@@ -18,6 +24,11 @@ def build_where_clauses(
     bd_status: str,
     sps_min: int,
     sps_max: int,
+    sellability_min: int = 0,
+    sellability_max: int = 100,
+    pred_sales_min: float = 0.0,
+    pred_sales_max: float = 10000.0,
+    only_sellable: bool = False,
 ) -> tuple[str, list]:
     """Build WHERE SQL and params from filter selections.
 
@@ -27,8 +38,13 @@ def build_where_clauses(
         "c.is_seed = false",
         "cs.sps_score IS NOT NULL",
         "cs.sps_score BETWEEN %s AND %s",
+        "(cs.sellability_score IS NULL OR cs.sellability_score BETWEEN %s AND %s)",
+        "(cs.predicted_sales IS NULL OR cs.predicted_sales BETWEEN %s AND %s)",
     ]
-    params: list = [sps_min, sps_max]
+    params: list = [sps_min, sps_max, sellability_min, sellability_max, pred_sales_min, pred_sales_max]
+
+    if only_sellable:
+        clauses.append("cs.is_sellable = true")
 
     if centrality:
         if len(centrality) == len(CENTRALITY_OPTS):
@@ -39,9 +55,9 @@ def build_where_clauses(
 
     if creator_types:
         if len(creator_types) == len(CREATOR_TYPE_OPTS):
-            clauses.append("(cs.creator_type = ANY(%s) OR cs.creator_type IS NULL)")
+            clauses.append("(COALESCE(c.creator_type_manual, c.creator_type_auto) = ANY(%s) OR (c.creator_type_manual IS NULL AND c.creator_type_auto IS NULL))")
         else:
-            clauses.append("cs.creator_type = ANY(%s)")
+            clauses.append("COALESCE(c.creator_type_manual, c.creator_type_auto) = ANY(%s)")
         params.append(creator_types)
 
     if strategy:

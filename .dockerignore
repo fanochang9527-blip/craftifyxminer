@@ -1,0 +1,15 @@
+# 不把宿主机 .env 打进镜像，避免容器内误用 localhost；运行时由 docker compose 的 env_file + environment 注入
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+venv
+.venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+*.egg-info
+.DS_Store

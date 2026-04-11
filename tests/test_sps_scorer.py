@@ -1,7 +1,7 @@
 """Unit tests for pipeline.sps_scorer — SPS 评分 + 中心度 (pure functions only)."""
 
 import sys
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 for mod_name in ("psycopg2", "psycopg2.pool", "psycopg2.extras"):
     if mod_name not in sys.modules:
@@ -52,21 +52,25 @@ class TestGetWeights:
 
 
 class TestCalcSPS:
-    def test_all_zero(self):
+    @patch("pipeline.sps_model.predict_sps", return_value=None)
+    def test_all_zero(self, _mock_predict):
         features = {fk: 0.0 for fk in FEATURE_KEYS}
         assert calc_sps(features, "content_creator") == 0.0
 
-    def test_all_100(self):
+    @patch("pipeline.sps_model.predict_sps", return_value=None)
+    def test_all_100(self, _mock_predict):
         features = {fk: 100.0 for fk in FEATURE_KEYS}
         sps = calc_sps(features, "content_creator")
         assert sps == pytest.approx(100.0, abs=1)
 
-    def test_partial_scores(self):
+    @patch("pipeline.sps_model.predict_sps", return_value=None)
+    def test_partial_scores(self, _mock_predict):
         features = {fk: 50.0 for fk in FEATURE_KEYS}
         sps = calc_sps(features, "oc_creator")
         assert sps == pytest.approx(50.0, abs=1)
 
-    def test_weights_applied(self):
+    @patch("pipeline.sps_model.predict_sps", return_value=None)
+    def test_weights_applied(self, _mock_predict):
         features = {fk: 0.0 for fk in FEATURE_KEYS}
         features["monetization_score"] = 100.0
         sps_oc = calc_sps(features, "oc_creator")

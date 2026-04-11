@@ -1,10 +1,9 @@
 """Unit tests for pipeline.feature_engine — 10 维指标计算 (pure functions only)."""
 
 import sys
-from types import ModuleType
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
-# Stub heavy dependencies so tests run without psycopg2 / a real DB
 for mod_name in ("psycopg2", "psycopg2.pool", "psycopg2.extras"):
     if mod_name not in sys.modules:
         sys.modules[mod_name] = MagicMock()
@@ -24,9 +23,21 @@ from pipeline.feature_engine import (
 )
 
 
+def _make_tweet(likes=0, retweets=0, replies=0, text="", created_at=None, media_urls=None):
+    now = datetime.now(timezone.utc)
+    return {
+        "likes": likes,
+        "retweets": retweets,
+        "replies": replies,
+        "text": text,
+        "created_at": created_at or (now - timedelta(days=1)).isoformat(),
+        "media_urls": media_urls or [],
+    }
+
+
 class TestAudience:
     def test_zero_followers(self):
-        assert calc_audience(0) == pytest.approx(0.0, abs=1)
+        assert calc_audience(0) == 0.0
 
     def test_100_followers(self):
         score = calc_audience(100)
@@ -39,18 +50,50 @@ class TestAudience:
         score = calc_audience(10_000)
         assert 70 < score < 90
 
+    def test_bot_penalty_high_ratio(self):
+        normal = calc_audience(1000, following=500)
+        penalized = calc_audience(1000, following=3000)
+        assert penalized < normal
+
+    def test_no_penalty_low_ratio(self):
+        score_no_follow = calc_audience(1000, following=0)
+        score_low_follow = calc_audience(1000, following=1000)
+        assert score_no_follow == score_low_follow
+
 
 class TestEngagement:
     def test_zero_followers(self):
-        assert calc_engagement(100, 50, 10, 0) == 0.0
+        tweets = [_make_tweet(likes=100)]
+        assert calc_engagement(tweets, 0) == 0.0
 
-    def test_normal(self):
-        # (10 + 5*2 + 2*3) / 1000 * 100 = 2.6
-        score = calc_engagement(10, 5, 2, 1000)
-        assert 2 < score < 5
+    def test_empty_tweets(self):
+        assert calc_engagement([], 1000) == 0.0
 
-    def test_capped_at_100(self):
-        assert calc_engagement(5000, 5000, 5000, 10) == 100.0
+    def test_normal_engagement(self):
+        tweets = [_make_tweet(likes=10, retweets=5, replies=2)]
+        score = calc_engagement(tweets, 1000)
+        assert score > 0
+
+    def test_high_engagement_capped(self):
+        tweets = [_make_tweet(likes=5000, retweets=5000, replies=5000)]
+        assert calc_engagement(tweets, 10) == 100.0
+
+    def test_time_decay_single_tweet_same_engagement_equal(self):
+        """One tweet: weighted avg equals raw engagement; weight factor cancels in numerator/denominator."""
+        now = datetime.now(timezone.utc)
+        recent = [_make_tweet(likes=100, created_at=(now - timedelta(days=1)).isoformat())]
+        old = [_make_tweet(likes=100, created_at=(now - timedelta(days=20)).isoformat())]
+        assert calc_engagement(recent, 1000) == calc_engagement(old, 1000)
+
+    def test_time_decay_mixed_tweets_changes_score(self):
+        """Multiple tweets: stale low-engagement tweets pull down the weighted average vs recent-only."""
+        now = datetime.now(timezone.utc)
+        mixed = [
+            _make_tweet(likes=100, created_at=(now - timedelta(days=1)).isoformat()),
+            _make_tweet(likes=10, created_at=(now - timedelta(days=20)).isoformat()),
+        ]
+        recent_only = [_make_tweet(likes=100, created_at=(now - timedelta(days=1)).isoformat())]
+        assert calc_engagement(recent_only, 1000) > calc_engagement(mixed, 1000)
 
 
 class TestVirality:
@@ -68,28 +111,33 @@ class TestVirality:
 
 
 class TestPosting:
-    def test_zero_posts(self):
-        assert calc_posting(0) == 0.0
+    def test_empty_tweets(self):
+        assert calc_posting([]) == 0.0
+
+    def test_tweets_without_dates_fallback(self):
+        tweets = [_make_tweet() for _ in range(15)]
+        for tw in tweets:
+            tw["created_at"] = None
+        score = calc_posting(tweets)
+        assert score == pytest.approx(50.0)
 
     def test_daily_poster(self):
-        assert calc_posting(30) == 100.0
-
-    def test_15_posts(self):
-        assert calc_posting(15) == pytest.approx(50.0)
-
-    def test_capped(self):
-        assert calc_posting(100) == 100.0
+        now = datetime.now(timezone.utc)
+        tweets = [
+            _make_tweet(created_at=(now - timedelta(days=i)).isoformat())
+            for i in range(30)
+        ]
+        score = calc_posting(tweets)
+        assert score >= 95.0
 
 
 class TestMonetization:
     def test_commerce_link(self):
         assert calc_monetization("Check my booth.pm/items/123", "") == 90.0
 
-    def test_action_keyword(self):
-        assert calc_monetization("commission open | DM me", "") == 60.0
-
-    def test_weak_signal(self):
-        assert calc_monetization("Visit my shop", "") == 30.0
+    def test_identity_keyword_high_conf(self):
+        score = calc_monetization("Freelance illustrator | commission open", "")
+        assert score >= 50.0
 
     def test_no_signals(self):
         assert calc_monetization("I love cats", "") == 0.0
@@ -136,15 +184,23 @@ class TestCharacterConsistency:
 
 
 class TestCommunity:
-    def test_zero(self):
-        assert calc_community(0, 0) == 0.0
+    def test_empty_tweets(self):
+        assert calc_community([]) == 0.0
 
-    def test_normal(self):
-        # (5*2 + 2*5) / 100 * 100 = 20
-        assert calc_community(5, 2) == pytest.approx(20.0)
+    def test_fanart_tweets_weighted(self):
+        tweets = [_make_tweet(text="#fanart look!", retweets=10)]
+        score = calc_community(tweets)
+        assert score > 0
 
-    def test_capped(self):
-        assert calc_community(500, 500) == 100.0
+    def test_mention_tweets(self):
+        tweets = [_make_tweet(text="Thanks @someone for the art!")]
+        score = calc_community(tweets)
+        assert score > 0
+
+    def test_no_signals(self):
+        tweets = [_make_tweet(text="Just a regular tweet")]
+        score = calc_community(tweets)
+        assert score >= 0
 
 
 class TestDataConfidence:

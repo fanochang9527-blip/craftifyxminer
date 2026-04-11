@@ -33,7 +33,7 @@ class TestBuildWhereClauses:
             sps_min=0,
             sps_max=100,
         )
-        assert "IS NULL" not in sql
+        assert "cs.centrality_tier IS NULL" not in sql
         assert "cs.centrality_tier = ANY(%s)" in sql
 
     def test_null_creator_type_included_when_all_selected(self):
@@ -45,7 +45,8 @@ class TestBuildWhereClauses:
             sps_min=0,
             sps_max=100,
         )
-        assert "cs.creator_type IS NULL" in sql
+        assert "COALESCE(c.creator_type_manual, c.creator_type_auto)" in sql
+        assert "creator_type_manual IS NULL" in sql
 
     def test_null_creator_type_excluded_when_partial_selected(self):
         sql, params = build_where_clauses(
@@ -56,8 +57,32 @@ class TestBuildWhereClauses:
             sps_min=0,
             sps_max=100,
         )
-        assert "cs.creator_type IS NULL" not in sql
-        assert "cs.creator_type = ANY(%s)" in sql
+        assert "creator_type_manual IS NULL" not in sql
+        assert "COALESCE(c.creator_type_manual, c.creator_type_auto) = ANY(%s)" in sql
+
+    def test_bd_status_rejected_unfit(self):
+        sql, params = build_where_clauses(
+            centrality=[],
+            creator_types=[],
+            strategy=[],
+            bd_status="rejected_unfit",
+            sps_min=0,
+            sps_max=100,
+        )
+        assert "c.bd_status = %s" in sql
+        assert "rejected_unfit" in params
+
+    def test_bd_status_rejected_not_creator(self):
+        sql, params = build_where_clauses(
+            centrality=[],
+            creator_types=[],
+            strategy=[],
+            bd_status="rejected_not_creator",
+            sps_min=0,
+            sps_max=100,
+        )
+        assert "c.bd_status = %s" in sql
+        assert "rejected_not_creator" in params
 
     def test_bd_status_all_no_filter(self):
         sql, params = build_where_clauses(
@@ -106,6 +131,36 @@ class TestBuildWhereClauses:
         )
         assert "c.discovery_strategy = ANY(%s)" in sql
         assert ["seed_following"] in params
+
+    def test_only_sellable_filter(self):
+        sql, params = build_where_clauses(
+            centrality=[],
+            creator_types=[],
+            strategy=[],
+            bd_status="all",
+            sps_min=0,
+            sps_max=100,
+            only_sellable=True,
+        )
+        assert "cs.is_sellable = true" in sql
+
+    def test_sellability_and_sales_ranges_present(self):
+        sql, params = build_where_clauses(
+            centrality=[],
+            creator_types=[],
+            strategy=[],
+            bd_status="all",
+            sps_min=0,
+            sps_max=100,
+            sellability_min=40,
+            sellability_max=90,
+            pred_sales_min=100.0,
+            pred_sales_max=800.0,
+        )
+        assert "cs.sellability_score BETWEEN %s AND %s" in sql
+        assert "cs.predicted_sales BETWEEN %s AND %s" in sql
+        assert 40 in params and 90 in params
+        assert 100.0 in params and 800.0 in params
 
 
 # ---------------------------------------------------------------------------

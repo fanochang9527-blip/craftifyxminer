@@ -27,6 +27,7 @@ pages = [
     st.Page("pages/2_candidates.py", title=t("nav.candidates"), icon="👤"),
     st.Page("pages/3_outreach.py", title=t("nav.outreach"), icon="📞"),
     st.Page("pages/4_cost_monitor.py", title=t("nav.cost_monitor"), icon="💸"),
+    st.Page("pages/6_seeds.py", title=t("nav.seeds"), icon="🌱"),
 ]
 
 if user.get("role") == "admin":

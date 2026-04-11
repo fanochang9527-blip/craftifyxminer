@@ -41,7 +41,10 @@ semantic_matrix:
       - "doll maker"
       - "game dev"
       - "indie dev"
+      - "indie artist"
       - "vtuber designer"
+      - "oc creator"
+      - "original character"
     ja:
       - "絵師"
       - "イラストレーター"
@@ -60,10 +63,14 @@ semantic_matrix:
       - "commission open"
       - "comm open"
       - "preorder"
+      - "preorder open"
       - "pre-order"
       - "shop now"
       - "new drop"
       - "merch"
+      - "limited"
+      - "drop"
+      - "my shop"
     zh:
       - "接稿"
       - "开预售"
@@ -83,6 +90,8 @@ semantic_matrix:
     - "shop"
     - "store"
     - "work"
+    - "work email"
+    - "business inquiry"
 
   tool_keywords:
     - "Procreate"
@@ -93,13 +102,18 @@ semantic_matrix:
     - "Live2D"
     - "Wacom"
     - "SAI"
+    - "saipaint"
+    - "Unity"
+    - "Unreal"
 
 # === Emoji 信号 ===
 emoji_signals:
-  creative:  ["🎨", "🖌️", "✍️", "📝"]
-  character: ["🐰", "🦊", "🐱", "🐻", "🌸", "✨", "⭐"]
-  commerce:  ["🛍️", "💰", "🛒", "📦"]
-  craft:     ["🔨", "🛠️"]
+  creative:   ["🎨", "🖌️", "✍️", "📝"]
+  character:  ["🐰", "🦊", "🐱", "🐻", "🌸", "✨", "⭐"]
+  commerce:   ["🛍️", "💰", "🛒", "📦"]
+  craft:      ["🔨", "🛠️"]
+  plush:      ["🧸", "🐻", "🔨", "🛠️"]
+  engagement: ["❤️", "💕", "🔥", "💥"]
 
 # === 误杀防范 ===
 false_positive_rules:
@@ -107,16 +121,29 @@ false_positive_rules:
     - "fan account"
     - "fan page"
     - "stan account"
-  studio_signals:
-    - "team"
-    - "studio"
-    - "agency"
-    - " we "
+  studio_flag:
+    signals: ["team", "studio", "agency", " we "]
+    counter_signals: [" i ", " my ", " me "]
 
-# === 创作者类型分类 (用于 SPS 权重选择) ===
-type_classification:
-  oc_creator:      ["OC", "original character", "my OC", "OC art"]
-  vtuber:          ["VTuber", "virtual youtuber", "虚拟主播", "Live2D"]
-  fan_artist:      ["fanart", "doujin", "二次创作", "同人"]
-  game_creator:    ["indie game", "game dev", "indie studio"]
-  content_creator: ["art blog", "daily art", "sketchbook"]
+# === 创作者类型标签 (6 类 type_tags → 最终映射 6 种类型) ===
+type_tags:
+  OC_Creator:          ["OC", "original character", "my OC", "OC art", "oc creator"]
+  VTuber:              ["VTuber", "virtual youtuber", "虚拟主播", "Live2D"]
+  Fan_Second_Creation: ["fanart", "doujin", "二次创作", "同人", "fanartist"]
+  Game_Studio:         ["indie game", "game dev", "indie studio", "gamedev"]
+  Virtual_IP:          ["virtual idol", "virtual IP", "バーチャル", "Vtuber mama"]
+  Plush_Merch:         ["plush", "plushie", "ぬいぐるみ", "doll maker", "toys"]
+
+# type_tags → 最终 creator_type 映射
+type_tag_mapping:
+  OC_Creator: "oc_creator"
+  VTuber: "vtuber"
+  Fan_Second_Creation: "fan_artist"
+  Game_Studio: "game_creator"
+  Virtual_IP: "vtuber"
+  Plush_Merch: "oc_creator"
+
+# === 置信度阈值 ===
+confidence_threshold:
+  high: 0.95
+  medium: 0.75

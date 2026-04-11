@@ -40,8 +40,8 @@ def main() -> int:
     if not args.skip_l1:
         seeds = fetch_all(
             """SELECT id, username FROM creators
-               WHERE is_seed = true AND seed_tier IN ('S', 'A', 'B')
-               ORDER BY CASE seed_tier WHEN 'S' THEN 1 WHEN 'A' THEN 2 ELSE 3 END, id
+               WHERE is_seed = true
+               ORDER BY id
                LIMIT %s""",
             (args.anchors,),
         )

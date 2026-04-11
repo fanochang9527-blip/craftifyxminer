@@ -167,13 +167,16 @@ init_database() {
     if command -v psql &>/dev/null; then
         psql "$DATABASE_URL" -f "$PROJECT_DIR/db/schema.sql"
         psql "$DATABASE_URL" -f "$PROJECT_DIR/db/indexes.sql" 2>/dev/null || true
+        psql "$DATABASE_URL" -f "$PROJECT_DIR/db/migrations/004_sps_ml_refactor.sql" 2>/dev/null || true
+        psql "$DATABASE_URL" -f "$PROJECT_DIR/db/migrations/005_seed_platform_account_unique.sql" 2>/dev/null || true
+        psql "$DATABASE_URL" -f "$PROJECT_DIR/db/migrations/006_dual_model_scores.sql" 2>/dev/null || true
     else
         warn "psql not found locally, running via Docker..."
         docker run --rm \
             -v "$PROJECT_DIR/db:/sql:ro" \
             --network host \
             postgres:18-alpine \
-            sh -c "psql '$DATABASE_URL' -f /sql/schema.sql && psql '$DATABASE_URL' -f /sql/indexes.sql 2>/dev/null || true"
+            sh -c "psql '$DATABASE_URL' -f /sql/schema.sql && psql '$DATABASE_URL' -f /sql/indexes.sql 2>/dev/null || true && psql '$DATABASE_URL' -f /sql/migrations/004_sps_ml_refactor.sql 2>/dev/null || true && psql '$DATABASE_URL' -f /sql/migrations/005_seed_platform_account_unique.sql 2>/dev/null || true && psql '$DATABASE_URL' -f /sql/migrations/006_dual_model_scores.sql 2>/dev/null || true"
     fi
     log "Database schema initialized"
 }

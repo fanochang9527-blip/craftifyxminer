@@ -1,5 +1,6 @@
 """Page 2: BD 审核工作台 — 汇总徽章 + 表格行 + 关键信号 + 操作按钮。"""
 
+import re
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
@@ -12,6 +13,7 @@ if not require_login():
     st.stop()
 
 from dashboard.i18n import t
+from config.settings import BD_WORKBENCH_PHASE, NON_SELLABLE_SPS_WEIGHT
 from db.connection import fetch_all, fetch_one, get_cursor
 from dashboard.components.radar_chart import create_radar_chart
 from dashboard.candidates_query import (
@@ -33,10 +35,12 @@ def _render_pagination_controls(
     with pag_cols[1]:
         if st.button("⬅️", disabled=(page <= 1), key=f"prev_{key_prefix}"):
             st.session_state["candidates_page"] = page - 1
+            st.session_state["candidates_detail_open_id"] = None
             st.rerun()
     with pag_cols[2]:
         if st.button("➡️", disabled=(page >= total_pages), key=f"next_{key_prefix}"):
             st.session_state["candidates_page"] = page + 1
+            st.session_state["candidates_detail_open_id"] = None
             st.rerun()
 
 
@@ -57,6 +61,25 @@ with st.sidebar:
         format_func=_opt("centrality"),
     )
     sps_min, sps_max = st.slider(t("candidates.sps_range"), 0, 100, (0, 100))
+    sellability_min, sellability_max = st.slider(t("candidates.sellability_range"), 0, 100, (0, 100))
+    pred_sales_min, pred_sales_max = st.slider(
+        t("candidates.pred_sales_range"),
+        0.0,
+        10000.0,
+        (0.0, 10000.0),
+        step=50.0,
+    )
+    only_sellable = st.checkbox(
+        t("candidates.only_sellable"),
+        value=(BD_WORKBENCH_PHASE >= 2),
+        help=t("candidates.only_sellable_help"),
+    )
+    sort_mode = st.selectbox(
+        t("candidates.sort_mode"),
+        ["legacy_sps", "dual_model"],
+        index=(1 if BD_WORKBENCH_PHASE >= 2 else 0),
+        format_func=lambda x: t(f"candidates.sort.{x}"),
+    )
     creator_types = st.multiselect(
         t("candidates.creator_type"),
         CREATOR_TYPE_OPTS,
@@ -93,6 +116,11 @@ where_sql, params = build_where_clauses(
     bd_status=bd_status_filter,
     sps_min=sps_min,
     sps_max=sps_max,
+    sellability_min=sellability_min,
+    sellability_max=sellability_max,
+    pred_sales_min=pred_sales_min,
+    pred_sales_max=pred_sales_max,
+    only_sellable=only_sellable,
 )
 
 count_query = f"""
@@ -109,10 +137,13 @@ page = st.session_state.get("candidates_page", 1)
 offset, total_pages = calc_pagination(total_count, page, per_page)
 
 query = f"""
-    SELECT c.id, c.username, c.bio, c.followers, c.bd_status, c.bd_decision,
+    SELECT c.id, c.username, c.bio, c.followers, c.bd_status, c.bd_decision, c.bd_decision_note,
            c.discovery_strategy, c.has_merch_experience, c.website,
            c.anchor_seed, c.discovered_via, c.discovered_date,
-           cs.sps_score, cs.centrality_tier, cs.creator_type, cs.seed_connections,
+           c.creator_type_manual, c.creator_type_auto,
+           COALESCE(c.creator_type_manual, c.creator_type_auto, 'unknown') AS creator_type,
+           cs.sellability_score, cs.is_sellable, cs.predicted_sales,
+           cs.sps_score, cs.centrality_tier, cs.seed_connections,
            cf.audience_score, cf.engagement_score, cf.virality_score,
            cf.posting_score, cf.monetization_score, cf.growth_score,
            cf.circle_influence_score, cf.character_consistency,
@@ -121,7 +152,11 @@ query = f"""
     JOIN creator_scores cs ON cs.creator_id = c.id
     LEFT JOIN creator_features cf ON cf.creator_id = c.id
     WHERE {where_sql}
-    ORDER BY cs.sps_score DESC
+    ORDER BY {
+        "cs.sps_score DESC"
+        if sort_mode == "legacy_sps"
+        else f"CASE WHEN COALESCE(cs.is_sellable, false) THEN COALESCE(cs.sps_score, 0) ELSE COALESCE(cs.sps_score, 0) * {NON_SELLABLE_SPS_WEIGHT} END DESC, COALESCE(cs.predicted_sales, 0) DESC, cs.sps_score DESC"
+    }
     LIMIT %s OFFSET %s
 """
 candidates = fetch_all(query, tuple(params) + (per_page, offset))
@@ -135,8 +170,10 @@ st.title(t("candidates.title"))
 hub_count = sum(1 for c in candidates if c.get("centrality_tier") == "Hub")
 conn_count = sum(1 for c in candidates if c.get("centrality_tier") == "Connector")
 high_sps_count = sum(1 for c in candidates if (c.get("sps_score") or 0) >= 75)
+high_sellability_count = sum(1 for c in candidates if (c.get("sellability_score") or 0) >= 60)
+high_pred_sales_count = sum(1 for c in candidates if (c.get("predicted_sales") or 0) >= 500)
 
-badge_cols = st.columns([2, 2, 2, 6])
+badge_cols = st.columns([2, 2, 2, 2, 2, 6])
 with badge_cols[0]:
     st.metric(label=t("options.centrality.Hub"), value=hub_count)
 with badge_cols[1]:
@@ -144,6 +181,10 @@ with badge_cols[1]:
 with badge_cols[2]:
     st.metric(label=t("candidates.badge_high_sps"), value=high_sps_count)
 with badge_cols[3]:
+    st.metric(label=t("candidates.badge_high_sellability"), value=high_sellability_count)
+with badge_cols[4]:
+    st.metric(label=t("candidates.badge_high_pred_sales"), value=high_pred_sales_count)
+with badge_cols[5]:
     st.markdown(f"**{t('candidates.match_count', count=total_count)}**")
 
 # ---------------------------------------------------------------------------
@@ -215,73 +256,92 @@ def _build_signals(c: dict) -> str:
     return " ".join(tags) if tags else "—"
 
 
+# Compact source labels (align with product mock: L1: @seed / L1 Trend / Seed / Legacy)
+_SOURCE_FORMAT = {
+    "seed_following": "L1",
+    "geo_explore": "L1 Geo",
+    "hashtag_explore": "L1 Tag",
+    "time_explore": "L1 Trend",
+    "csv_import": "Seed",
+    "legacy": "Legacy",
+}
+
+
 def _build_source(c: dict) -> str:
-    """Format discovery source."""
-    strategy = c.get("discovery_strategy") or ""
-    anchor = c.get("anchor_seed") or ""
-    via = c.get("discovered_via") or ""
+    """Format discovery source as compact L1 / strategy / Seed / Legacy."""
+    strategy = (c.get("discovery_strategy") or "").strip()
+    anchor = (c.get("anchor_seed") or "").strip()
 
-    if strategy and anchor:
-        label = t(f"options.strategy.{strategy}") if strategy in ("seed_following", "geo_explore", "hashtag_explore", "time_explore") else strategy
-        return f"{label}: @{anchor}"
-    if via:
-        return via
-    if strategy:
-        return t(f"options.strategy.{strategy}") if strategy in ("seed_following", "geo_explore", "hashtag_explore", "time_explore") else strategy
-    return "—"
+    if strategy == "seed_following" and anchor:
+        first_raw = anchor.split(",")[0].strip().lstrip("@")
+        if len(first_raw) > 12:
+            first_raw = first_raw[:11] + "…"
+        extra_m = re.search(r"\(\+(\d+)\)\s*$", anchor)
+        if extra_m:
+            suffix = f" +{extra_m.group(1)}"
+        else:
+            parts = [p.strip() for p in anchor.split(",") if p.strip()]
+            n_extra = max(0, len(parts) - 1)
+            suffix = f" +{n_extra}" if n_extra else ""
+        return f"L1: @{first_raw}{suffix}"
+
+    label = _SOURCE_FORMAT.get(strategy, strategy or "—")
+    return label
 
 
 # ---------------------------------------------------------------------------
-# Table header
+# Responsive row layout + per-row action buttons
 # ---------------------------------------------------------------------------
 
-header_cols = st.columns([2, 1.2, 0.8, 3, 1.2, 1, 2.5])
+header_cols = st.columns([2.1, 1.0, 0.9, 1.0, 0.7, 2.9, 1.0, 0.8, 2.6])
 header_cols[0].markdown(f"**{t('candidates.col_creator')}**")
 header_cols[1].markdown(f"**{t('candidates.centrality')}**")
-header_cols[2].markdown(f"**SPS**")
-header_cols[3].markdown(f"**{t('candidates.col_signals')}**")
-header_cols[4].markdown(f"**{t('candidates.col_source')}**")
-header_cols[5].markdown(f"**{t('candidates.col_discovered')}**")
-header_cols[6].markdown(f"**{t('candidates.col_actions')}**")
+header_cols[2].markdown(f"**{t('candidates.col_sellability')}**")
+header_cols[3].markdown(f"**{t('candidates.col_pred_sales')}**")
+header_cols[4].markdown("**SPS**")
+header_cols[5].markdown(f"**{t('candidates.col_signals')}**")
+header_cols[6].markdown(f"**{t('candidates.col_source')}**")
+header_cols[7].markdown(f"**{t('candidates.col_discovered')}**")
+header_cols[8].markdown(f"**{t('candidates.col_actions')}**")
 st.markdown("---")
 
-# ---------------------------------------------------------------------------
-# Candidate rows
-# ---------------------------------------------------------------------------
+if "candidates_detail_open_id" not in st.session_state:
+    st.session_state.candidates_detail_open_id = None
 
 for c in candidates:
     cid = c["id"]
     tier = c.get("centrality_tier") or "Peripheral"
     emoji, _ = _TIER_STYLE.get(tier, ("⚪", "#95a5a6"))
     sps = float(c.get("sps_score") or 0)
+    sellability = float(c.get("sellability_score") or 0)
+    pred_sales = float(c.get("predicted_sales") or 0)
     signals = _build_signals(c)
     source = _build_source(c)
     disc_date = c.get("discovered_date")
     disc_str = disc_date.strftime("%m-%d") if disc_date else "—"
 
-    row_cols = st.columns([2, 1.2, 0.8, 3, 1.2, 1, 2.5])
+    row_cols = st.columns([2.1, 1.0, 0.9, 1.0, 0.7, 2.9, 1.0, 0.8, 2.6])
+    row_cols[0].markdown(f"[@{c['username']}](https://x.com/{c['username']})")
+    row_cols[1].markdown(f"{emoji} {t(f'options.centrality.{tier}')}")
+    row_cols[2].markdown(f"**{sellability:.1f}**")
+    row_cols[3].markdown(f"**{pred_sales:.0f}**")
+    row_cols[4].markdown(f"**{sps:.1f}**")
+    row_cols[5].markdown(signals)
+    row_cols[6].caption(source)
+    row_cols[7].caption(disc_str)
 
-    with row_cols[0]:
-        st.markdown(f"[@{c['username']}](https://x.com/{c['username']})")
-
-    with row_cols[1]:
-        st.markdown(f"{emoji} {t(f'options.centrality.{tier}')}")
-
-    with row_cols[2]:
-        st.markdown(f"**{sps:.1f}**")
-
-    with row_cols[3]:
-        st.markdown(signals)
-
-    with row_cols[4]:
-        st.caption(source)
-
-    with row_cols[5]:
-        st.caption(disc_str)
-
-    with row_cols[6]:
-        bcols = st.columns(4)
-        with bcols[0]:
+    with row_cols[8]:
+        act_cols = st.columns([1.1, 1, 1, 1])
+        with act_cols[0]:
+            _open = st.session_state.get("candidates_detail_open_id") == cid
+            if st.button(
+                t("candidates.detail_toggle"),
+                key=f"detail_toggle_{cid}",
+                help=t("candidates.detail_radar"),
+            ):
+                st.session_state.candidates_detail_open_id = None if _open else cid
+                st.rerun()
+        with act_cols[1]:
             if st.button("✅", key=f"int_{cid}", help=t("candidates.btn_interested")):
                 with get_cursor() as cur:
                     cur.execute(
@@ -290,59 +350,76 @@ for c in candidates:
                     )
                 st.toast(t("candidates.marked_interested"))
                 st.rerun()
-        with bcols[1]:
-            if st.button("❌", key=f"rej_{cid}", help=t("candidates.btn_rejected")):
+        with act_cols[2]:
+            if st.button("🚫", key=f"unfit_{cid}", help=t("candidates.btn_rejected_unfit")):
                 with get_cursor() as cur:
                     cur.execute(
-                        "UPDATE creators SET bd_decision = 'rejected', bd_status = 'rejected', last_bd_update = NOW() WHERE id = %s",
+                        "UPDATE creators SET bd_decision = 'rejected_unfit', bd_status = 'rejected_unfit', last_bd_update = NOW() WHERE id = %s",
                         (cid,),
                     )
-                st.toast(t("candidates.marked_rejected"))
+                st.toast(t("candidates.marked_rejected_unfit"))
                 st.rerun()
-        with bcols[2]:
-            if st.button("⚠️", key=f"flag_{cid}", help=t("candidates.btn_flag")):
+        with act_cols[3]:
+            if st.button("❌", key=f"notcr_{cid}", help=t("candidates.btn_rejected_not_creator")):
                 with get_cursor() as cur:
                     cur.execute(
-                        "UPDATE creators SET bd_decision = 'flagged', bd_status = 'pending', last_bd_update = NOW() WHERE id = %s",
+                        "UPDATE creators SET bd_decision = 'rejected_not_creator', bd_status = 'rejected_not_creator', last_bd_update = NOW() WHERE id = %s",
                         (cid,),
                     )
-                st.toast(t("candidates.marked_flagged"))
-                st.rerun()
-        with bcols[3]:
-            if st.button("⏸️", key=f"def_{cid}", help=t("candidates.btn_deferred")):
-                with get_cursor() as cur:
-                    cur.execute(
-                        "UPDATE creators SET bd_decision = 'deferred', bd_status = 'deferred', last_bd_update = NOW() WHERE id = %s",
-                        (cid,),
-                    )
-                st.toast(t("candidates.marked_deferred"))
+                st.toast(t("candidates.marked_rejected_not_creator"))
                 st.rerun()
 
-    with st.expander(f"📊 {t('candidates.detail_radar')} — @{c['username']}", expanded=False):
-        detail_left, detail_right = st.columns([3, 2])
-        with detail_left:
+    if st.session_state.get("candidates_detail_open_id") == cid:
+        ctype = c.get("creator_type") or ""
+        ctype_display = t(f"options.creator_type.{ctype}") if ctype else "N/A"
+        followers_val = c.get("followers", 0) or 0
+        seeds_val = c.get("seed_connections", 0) or 0
+        with st.container(border=True):
+            st.caption(t("candidates.detail_radar"))
+            # 上：基础信息
             if c.get("bio"):
-                st.text(c["bio"][:300])
-            ctype = c.get("creator_type") or ""
-            ctype_display = t(f"options.creator_type.{ctype}") if ctype else "N/A"
-            followers_val = c.get("followers", 0) or 0
-            seeds_val = c.get("seed_connections", 0) or 0
-            st.caption(
-                f"{t('candidates.type_label')}: {ctype_display} | "
-                f"{t('candidates.followers_label')}: {followers_val:,} | "
-                f"{t('candidates.seed_connections_label')}: {seeds_val}"
+                st.text(c["bio"][:500])
+            else:
+                st.caption("—")
+            st.markdown(
+                f"**{t('candidates.type_label')}**: {ctype_display} · "
+                f"**{t('candidates.followers_label')}**: {followers_val:,} · "
+                f"**{t('candidates.seed_connections_label')}**: {seeds_val}"
             )
-            note = st.text_input(
-                t("candidates.note_placeholder"),
-                key=f"note_{cid}",
-                label_visibility="collapsed",
-                placeholder=t("candidates.note_placeholder"),
+            ncols = st.columns([4, 1])
+            with ncols[0]:
+                note = st.text_input(
+                    t("candidates.note_placeholder"),
+                    key=f"note_{cid}",
+                    placeholder=t("candidates.note_placeholder"),
+                    value=c.get("bd_decision_note") or "",
+                )
+            with ncols[1]:
+                if st.button(t("candidates.save_note"), key=f"note_save_{cid}"):
+                    with get_cursor() as cur:
+                        cur.execute("UPDATE creators SET bd_decision_note = %s WHERE id = %s", (note, cid))
+                    st.toast(t("candidates.note_saved"))
+                    st.rerun()
+            current_type = c.get("creator_type_manual") or c.get("creator_type_auto") or "unknown"
+            type_opts = CREATOR_TYPE_OPTS
+            type_idx = type_opts.index(current_type) if current_type in type_opts else len(type_opts) - 1
+            new_type = st.selectbox(
+                t("candidates.type_label"),
+                type_opts,
+                index=type_idx,
+                key=f"type_{cid}",
+                format_func=_opt("creator_type"),
             )
-            if note:
+            if st.button(t("candidates.apply_type"), key=f"type_apply_{cid}"):
                 with get_cursor() as cur:
-                    cur.execute("UPDATE creators SET bd_decision_note = %s WHERE id = %s", (note, cid))
-
-        with detail_right:
+                    cur.execute(
+                        "UPDATE creators SET creator_type_manual = %s WHERE id = %s",
+                        (new_type, cid),
+                    )
+                st.toast(t("candidates.type_updated"))
+                st.rerun()
+            # 下：雷达图（整行宽度）
+            st.markdown("---")
             features = {k: c.get(k, 0) for k in _FEATURE_KEYS}
             fig = create_radar_chart(features, f"@{c['username']}", labels=_RADAR_LABELS)
             st.plotly_chart(fig, use_container_width=True, key=f"radar_{cid}")

@@ -26,6 +26,7 @@ services:
     env_file: .env
     volumes:
       - app_logs:/app/logs
+      - model_data:/app/models
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:5000/health')\""]
       interval: 30s
@@ -59,7 +60,9 @@ services:
     env_file: .env
     volumes:
       - app_logs:/app/logs
+      - model_data:/app/models
 
 volumes:
   nginx_logs:
   app_logs:
+  model_data:

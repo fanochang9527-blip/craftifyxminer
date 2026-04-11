@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+#
+# 生产（RDS + docker-compose.prod）删库重建 — 在 ECS 上由运维执行。
+# 危险操作：会清空 public schema 或整库。执行前务必 RDS 快照或 pg_dump。
+#
+# 用法示例:
+#   cd /opt/craftifyxminer
+#   set -a && source .env && set +a
+#   CONFIRM=yes bash scripts/prod_rebuild_database.sh
+#
+set -euo pipefail
+
+RED='\033[0;31m'; GREEN='\033[0;32m'; NC='\033[0m'
+PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$PROJECT_DIR"
+
+if [[ -f "$PROJECT_DIR/.env" ]]; then
+  set -a
+  # shellcheck source=/dev/null
+  source "$PROJECT_DIR/.env"
+  set +a
+fi
+
+: "${DATABASE_URL:?set DATABASE_URL (source .env)}"
+
+if [[ "${CONFIRM:-}" != "yes" ]]; then
+  echo -e "${RED}Refusing to run: set CONFIRM=yes to acknowledge backup + downtime.${NC}"
+  exit 1
+fi
+
+echo -e "${GREEN}[1/5]${NC} Stopping app containers (prod)..."
+docker compose -f docker-compose.prod.yml stop cron server dashboard nginx 2>/dev/null || true
+
+if [[ "${WIPE_PUBLIC_SCHEMA:-}" == "yes" ]]; then
+  echo -e "${GREEN}[1b]${NC} WIPE_PUBLIC_SCHEMA=yes — DROP SCHEMA public CASCADE; recreate..."
+  U="${POSTGRES_USER:-miner}"
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;"
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT ALL ON SCHEMA public TO ${U};"
+fi
+
+echo -e "${GREEN}[2/5]${NC} Applying schema.sql + indexes.sql + migrations 004–006 ..."
+if command -v psql &>/dev/null; then
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$PROJECT_DIR/db/schema.sql"
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$PROJECT_DIR/db/indexes.sql"
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$PROJECT_DIR/db/migrations/004_sps_ml_refactor.sql"
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$PROJECT_DIR/db/migrations/005_seed_platform_account_unique.sql"
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$PROJECT_DIR/db/migrations/006_dual_model_scores.sql"
+else
+  docker run --rm \
+    -v "$PROJECT_DIR/db:/sql:ro" \
+    --network host \
+    postgres:18-alpine \
+    sh -c "psql '$DATABASE_URL' -v ON_ERROR_STOP=1 -f /sql/schema.sql && psql '$DATABASE_URL' -v ON_ERROR_STOP=1 -f /sql/indexes.sql && psql '$DATABASE_URL' -v ON_ERROR_STOP=1 -f /sql/migrations/004_sps_ml_refactor.sql && psql '$DATABASE_URL' -v ON_ERROR_STOP=1 -f /sql/migrations/005_seed_platform_account_unique.sql && psql '$DATABASE_URL' -v ON_ERROR_STOP=1 -f /sql/migrations/006_dual_model_scores.sql"
+fi
+
+echo -e "${GREEN}[3/5]${NC} Done SQL. Next: create admin (interactive credentials):"
+echo "  docker compose -f docker-compose.prod.yml run --rm server python -m auth.manage create-admin --username ADMIN --password '...'"
+
+echo -e "${GREEN}[4/5]${NC} Seed import (xlsx or csv inside image under /app/data):"
+echo "  docker compose -f docker-compose.prod.yml run --rm server python -m pipeline.seed_import --xlsx '/app/data/创作者账号链接及销量收集.xlsx' --skip-post-pipeline"
+echo "  # or: --csv /app/data/creators_seed_from_xlsx.csv --skip-post-pipeline"
+
+echo -e "${GREEN}[5/5]${NC} Start stack:"
+echo "  docker compose -f docker-compose.prod.yml up -d --build"

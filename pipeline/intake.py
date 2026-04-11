@@ -35,16 +35,19 @@ def store_dataset_items(items: list[dict]) -> dict:
 
         with get_cursor() as cur:
             cur.execute(
-                """INSERT INTO creators (username, bio, website, followers, following, tweets_count)
-                   VALUES (%s, %s, %s, %s, %s, %s)
-                   ON CONFLICT (username) DO UPDATE SET
+                """INSERT INTO creators (
+                       username, bio, website, followers, following, tweets_count,
+                       platform, platform_account_id)
+                   VALUES (%s, %s, %s, %s, %s, %s, 'twitter', %s)
+                   ON CONFLICT (platform, platform_account_id) DO UPDATE SET
+                       username = EXCLUDED.username,
                        bio = COALESCE(NULLIF(EXCLUDED.bio, ''), creators.bio),
                        website = COALESCE(NULLIF(EXCLUDED.website, ''), creators.website),
                        followers = EXCLUDED.followers,
                        following = EXCLUDED.following,
                        tweets_count = EXCLUDED.tweets_count
                    RETURNING (xmax = 0) AS is_insert""",
-                (username, bio, website, followers, following, tweets_count),
+                (username, bio, website, followers, following, tweets_count, username),
             )
             row = cur.fetchone()
             if row and row["is_insert"]:

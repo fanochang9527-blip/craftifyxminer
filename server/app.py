@@ -43,7 +43,18 @@ def create_app():
 
     @app.route("/health")
     def health():
-        return {"status": "ok"}
+        from config.settings import MODEL_PATH, SELLABILITY_MODEL_PATH
+
+        return {
+            "status": "ok",
+            "models": {
+                "sps_model": {"path": str(MODEL_PATH), "exists": MODEL_PATH.exists()},
+                "sellability_model": {
+                    "path": str(SELLABILITY_MODEL_PATH),
+                    "exists": SELLABILITY_MODEL_PATH.exists(),
+                },
+            },
+        }
 
     @app.route("/api/login", methods=["POST"])
     @limiter.limit("5/minute")

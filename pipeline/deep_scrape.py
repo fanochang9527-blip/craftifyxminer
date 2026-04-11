@@ -21,11 +21,15 @@ logger = logging.getLogger(__name__)
 
 
 def _get_pending_candidates(limit: int = DEEP_SCRAPE_BATCH_SIZE) -> list[dict]:
-    """Fetch creators that passed AI filter but haven't been deep-scraped yet."""
+    """Fetch creators that passed AI filter but haven't been deep-scraped in the last 30 days."""
     return fetch_all(
         """SELECT id, username FROM creators
            WHERE bd_status IN ('rule_passed', 'ai_passed')
-             AND id NOT IN (SELECT DISTINCT creator_id FROM tweets WHERE creator_id IS NOT NULL)
+             AND id NOT IN (
+                 SELECT DISTINCT creator_id FROM tweets
+                 WHERE creator_id IS NOT NULL
+                   AND collected_at > NOW() - INTERVAL '30 days'
+             )
            ORDER BY first_seen_at ASC
            LIMIT %s""",
         (limit,),
@@ -33,13 +37,13 @@ def _get_pending_candidates(limit: int = DEEP_SCRAPE_BATCH_SIZE) -> list[dict]:
 
 
 def _check_budget() -> bool:
+    """Check daily budget — logs warning but never blocks."""
     row = fetch_one(
         "SELECT COALESCE(SUM(apify_cost_usd), 0) AS today FROM cost_tracking WHERE date = CURRENT_DATE"
     )
     today = float(row["today"]) if row else 0.0
     if today >= DAILY_APIFY_BUDGET_USD:
-        logger.warning("Daily Apify budget exhausted ($%.2f)", today)
-        return False
+        logger.warning("Daily Apify budget exceeded ($%.2f) — continuing anyway", today)
     return True
 
 
@@ -176,3 +180,39 @@ def trigger_deep_scrape_batch(limit: int | None = None) -> dict:
             )
 
     return {"candidates": len(candidates), "run_id": run_id, "budget_ok": True}
+
+
+def trigger_seed_deep_scrape(usernames: list[str]) -> dict:
+    """Deep-scrape specific seed users — ignores budget limits.
+
+    Called by seed_import to ensure seeds always have full profile + tweet data.
+    """
+    if not usernames:
+        return {"candidates": 0, "run_id": None}
+
+    logger.info("Triggering seed deep scrape for %d users", len(usernames))
+
+    with open(APIFY_CONFIG_PATH, encoding="utf-8") as f:
+        apify_cfg = yaml.safe_load(f)
+
+    profile_cfg = apify_cfg["profile_actor"]
+    actor_input = profile_cfg["input"].copy()
+    if "twitterHandles" in actor_input:
+        actor_input["twitterHandles"] = usernames
+    else:
+        actor_input["handles"] = usernames
+    tweets_per_handle = 10
+    actor_input["maxItems"] = max(actor_input.get("maxItems", 500), len(usernames) * tweets_per_handle)
+
+    client = ApifyClient(APIFY_API_TOKEN)
+    run = client.actor(profile_cfg["actor_id"]).call(run_input=actor_input)
+    run_id = run.get("id", "")
+
+    dataset_id = run.get("defaultDatasetId")
+    stats = {}
+    if dataset_id:
+        items = list(client.dataset(dataset_id).iterate_items())
+        stats = _store_deep_scrape_results(items)
+        logger.info("Seed deep scrape complete: %s", stats)
+
+    return {"candidates": len(usernames), "run_id": run_id, **stats}

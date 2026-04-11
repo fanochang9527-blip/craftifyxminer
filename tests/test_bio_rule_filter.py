@@ -104,6 +104,11 @@ class TestFalsePositives:
         r = f.filter("We are a creative agency specializing in branding")
         assert r["passed"] is False
 
+    def test_studio_with_counter_signal_not_flagged(self, f):
+        """studio_flag has counter_signals (I/my/me); solo creator voice should pass."""
+        r = f.filter("I run my small studio | illustrator | commission open")
+        assert r["passed"] is True
+
 
 # === 灰区 (交给 LLM) ===
 
@@ -143,6 +148,6 @@ class TestTypeClassification:
         r = f.filter("indie game dev | pixiv.net/u/123")
         assert r["type"] == "game_creator"
 
-    def test_default_content_creator(self, f):
+    def test_no_type_match_returns_unknown(self, f):
         r = f.filter("Just creating art | gumroad.com/art")
-        assert r["type"] == "content_creator"
+        assert r["type"] == "unknown"

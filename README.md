@@ -2,7 +2,7 @@
 
 > AI 驱动的海外创作者自动发现与评估系统（**7.0 在 6.0 架构上迭代**，见文档）
 
-**主文档**：[docs/CraftifyX-Miner-7.0-项目说明书.md](docs/CraftifyX-Miner-7.0-项目说明书.md) · [docs/CraftifyX-Miner-7.0-开发实现方案.md](docs/CraftifyX-Miner-7.0-开发实现方案.md)
+**主文档**：[docs/CraftifyX-Miner-7.0-项目说明书.md](docs/CraftifyX-Miner-7.0-项目说明书.md) · [docs/CraftifyX-Miner-7.0-开发实现方案.md](docs/CraftifyX-Miner-7.0-开发实现方案.md) · [发现者：爬取与过滤流程（实现说明）](docs/发现者爬取与过滤流程.md)
 
 CraftifyX Miner 是一套低成本（≤$500/月）、4 周可交付 MVP 的自动化系统，帮助 BD 团队**每天产出约 300-500 名带 SPS 的海外创作者候选人**（VTuber / OC / 游戏开发者等），取代人工地毯式搜索。
 
@@ -274,6 +274,7 @@ docker compose -f docker-compose.prod.yml run --rm server python -m auth.manage 
 
 - [项目说明书 (7.0)](docs/CraftifyX-Miner-7.0-项目说明书.md) — 面向决策层的整体介绍
 - [开发实现方案 (7.0)](docs/CraftifyX-Miner-7.0-开发实现方案.md) — 完整开发任务清单与代码设计
+- [发现者：爬取与过滤流程](docs/发现者爬取与过滤流程.md) — 锚点、L1、入库、规则/AI 过滤、溯源与下游（对照代码）
 - [项目说明书 (6.0)](docs/CraftifyX-Miner-6.0-项目说明书.md) — 6.0 版本参考
 - [开发实现方案 (6.0)](docs/CraftifyX-Miner-6.0-开发实现方案.md) — 6.0 版本实现参考
 

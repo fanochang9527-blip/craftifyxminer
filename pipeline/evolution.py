@@ -1,7 +1,7 @@
 """飞轮进化 (简化版) — 数据回流 + Seed 自动晋升。
 
-当 sales_feedback.gmv > $1000 时将对应创作者晋升为 Seed (Tier C)。
-月度报告: 统计各 Tier 的联系成功率、成交率。
+当 sales_feedback.gmv > $1000 时将对应创作者晋升为 Seed。
+月度报告: 按 creator_type 统计联系成功率、成交率。
 """
 
 import logging
@@ -33,13 +33,13 @@ def promote_seeds() -> int:
     for row in candidates:
         with get_cursor() as cur:
             cur.execute(
-                "UPDATE creators SET is_seed = true, seed_tier = 'C' WHERE id = %s AND is_seed = false",
+                "UPDATE creators SET is_seed = true WHERE id = %s AND is_seed = false",
                 (row["creator_id"],),
             )
             if cur.rowcount > 0:
                 promoted += 1
                 logger.info(
-                    "Promoted creator %d to Seed (Tier C) with GMV $%.2f",
+                    "Promoted creator %d to Seed with GMV $%.2f",
                     row["creator_id"], float(row["total_gmv"]),
                 )
 
@@ -49,16 +49,16 @@ def promote_seeds() -> int:
 
 
 def monthly_report() -> dict:
-    """Generate monthly performance report by tier.
+    """Generate monthly performance report by creator_type.
 
-    Returns a dict with tier-level stats:
-        {tier: {total, contacted, responded, deals_closed, total_gmv, contact_rate, deal_rate}}
+    Returns a dict with type-level stats:
+        {type: {total, contacted, responded, deals_closed, total_gmv, contact_rate, deal_rate}}
     """
     first_of_month = date.today().replace(day=1)
 
-    tiers = fetch_all(
+    rows = fetch_all(
         """SELECT
-               c.seed_tier AS tier,
+               COALESCE(c.creator_type_manual, c.creator_type_auto, 'unknown') AS ctype,
                COUNT(DISTINCT c.id) AS total,
                COUNT(DISTINCT ol.creator_id) AS contacted,
                COUNT(DISTINCT ol.creator_id) FILTER (WHERE ol.response_received = true) AS responded,
@@ -68,18 +68,18 @@ def monthly_report() -> dict:
            LEFT JOIN outreach_log ol ON ol.creator_id = c.id AND ol.contacted_at >= %s
            LEFT JOIN sales_feedback sf ON sf.creator_id = c.id AND sf.created_at >= %s
            WHERE c.is_seed = true
-           GROUP BY c.seed_tier
-           ORDER BY c.seed_tier""",
+           GROUP BY ctype
+           ORDER BY ctype""",
         (first_of_month, first_of_month),
     )
 
     report = {}
-    for row in tiers:
-        tier = row["tier"] or "unknown"
+    for row in rows:
+        ctype = row["ctype"] or "unknown"
         total = int(row["total"])
         contacted = int(row["contacted"])
         deals = int(row["deals_closed"])
-        report[tier] = {
+        report[ctype] = {
             "total": total,
             "contacted": contacted,
             "responded": int(row["responded"]),

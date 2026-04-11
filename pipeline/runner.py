@@ -1,8 +1,13 @@
-"""Full pipeline runner with structured logging.
+"""Full pipeline runner — 7 步日常流水线。
 
-Provides `run_full_pipeline()` — the single entry-point for both manual
-invocation (`docker compose run ... server python -m pipeline.runner`)
-and the cron scheduler.
+步骤:
+  1. Generate anchors (全量种子)
+  2. L1 scan (Apify following)
+  3. Deep scrape
+  4. Type classification
+  5. Feature computation
+  6. SPS prediction
+  7. Model evaluation
 """
 
 from __future__ import annotations
@@ -50,7 +55,7 @@ class _StepTimer:
         print(line, flush=True)
         logger.info(line.strip())
         print(flush=True)
-        return True  # suppress exception so pipeline continues
+        return True
 
 
 def run_full_pipeline(
@@ -58,29 +63,32 @@ def run_full_pipeline(
     anchors: list[dict] | None = None,
     deep_limit: int | None = None,
 ) -> dict:
-    """Execute the full daily pipeline with structured logging.
+    """Execute the full daily 7-step pipeline.
 
     Returns a summary dict of all step results.
     """
     from pipeline.deep_scrape import trigger_deep_scrape_batch
     from pipeline.discovery import generate_daily_seeds, trigger_l1_scan
     from pipeline.feature_engine import compute_all_pending
+    from pipeline.model_monitor import evaluate_model
     from pipeline.sps_scorer import score_all_pending
+    from pipeline.type_classifier import classify_all_pending
 
     steps = [
-        "Generate anchors",
+        "Generate anchors (all seeds)",
         "L1 scan (Apify following)",
         "Deep scrape",
+        "Type classification",
         "Feature computation",
-        "SPS scoring",
+        "SPS prediction",
+        "Model evaluation",
     ]
     total = len(steps)
     start_time = time.time()
     start_ts = _ts()
 
-    # ---- Header ----
     print(_SEP)
-    print(f" CraftifyX Miner — Daily Pipeline")
+    print(f" CraftifyX Miner — Daily Pipeline (7-step)")
     print(f" Date: {start_ts}")
     print(_SEP)
     print(" Tasks:")
@@ -94,24 +102,24 @@ def run_full_pipeline(
         "anchors": 0,
         "l1": {},
         "deep_scrape": {},
+        "classified": 0,
         "features": 0,
         "scores": 0,
+        "evaluation": {},
         "errors": [],
     }
 
-    # ---- Step 1: anchors ----
+    # Step 1: anchors
     with _StepTimer(1, total, steps[0]) as st:
         if anchors is None:
             anchors = generate_daily_seeds()
         n = len(anchors)
-        seed_count = sum(1 for a in anchors if a.get("strategy") == "seed_following")
-        explore_count = n - seed_count
-        st.result_line = f"{n} anchors ({seed_count} seed + {explore_count} explore)"
+        st.result_line = f"{n} anchors (all seeds)"
         summary["anchors"] = n
     if st.failed:
         summary["errors"].append(("anchors", st.result_line))
 
-    # ---- Step 2: L1 scan ----
+    # Step 2: L1 scan
     with _StepTimer(2, total, steps[1]) as st:
         l1 = trigger_l1_scan(anchors=anchors)
         stored = l1.get("stored", {})
@@ -127,7 +135,7 @@ def run_full_pipeline(
     if st.failed:
         summary["errors"].append(("l1", st.result_line))
 
-    # ---- Step 3: Deep scrape ----
+    # Step 3: Deep scrape
     with _StepTimer(3, total, steps[2]) as st:
         ds_kwargs: dict = {}
         if deep_limit is not None:
@@ -138,23 +146,41 @@ def run_full_pipeline(
     if st.failed:
         summary["errors"].append(("deep_scrape", st.result_line))
 
-    # ---- Step 4: Features ----
+    # Step 4: Type classification
     with _StepTimer(4, total, steps[3]) as st:
+        classified = classify_all_pending()
+        st.result_line = f"{classified} creators classified"
+        summary["classified"] = classified
+    if st.failed:
+        summary["errors"].append(("classification", st.result_line))
+
+    # Step 5: Features
+    with _StepTimer(5, total, steps[4]) as st:
         feat = compute_all_pending()
         st.result_line = f"{feat} creators computed"
         summary["features"] = feat
     if st.failed:
         summary["errors"].append(("features", st.result_line))
 
-    # ---- Step 5: SPS scoring ----
-    with _StepTimer(5, total, steps[4]) as st:
+    # Step 6: SPS prediction
+    with _StepTimer(6, total, steps[5]) as st:
         scores = score_all_pending()
         st.result_line = f"{scores} creators scored"
         summary["scores"] = scores
     if st.failed:
         summary["errors"].append(("scores", st.result_line))
 
-    # ---- Summary ----
+    # Step 7: Model evaluation
+    with _StepTimer(7, total, steps[6]) as st:
+        eval_result = evaluate_model()
+        recall = eval_result.get("recall", "N/A")
+        p250 = eval_result.get("precision_at_250", "N/A")
+        st.result_line = f"recall={recall}, P@250={p250}"
+        summary["evaluation"] = eval_result
+    if st.failed:
+        summary["errors"].append(("evaluation", st.result_line))
+
+    # Summary
     total_elapsed = time.time() - start_time
     status = "SUCCESS" if not summary["errors"] else "PARTIAL FAILURE"
     summary["elapsed"] = round(total_elapsed, 1)
@@ -173,8 +199,14 @@ def run_full_pipeline(
           f"(passed {l1_filter.get('rule_passed', 0)}+{l1_filter.get('ai_passed', 0)}, "
           f"rejected {l1_filter.get('rule_rejected', 0)}+{l1_filter.get('ai_rejected', 0)})")
     print(f" Deep scraped:        {ds_data.get('candidates', 0)}")
+    print(f" Type classified:     {summary['classified']}")
     print(f" Features computed:   {summary['features']}")
     print(f" Scores computed:     {summary['scores']}")
+    eval_data = summary.get("evaluation", {})
+    if eval_data and not eval_data.get("error"):
+        print(f" Model eval:          recall={eval_data.get('recall')}, "
+              f"P@250={eval_data.get('precision_at_250')}, "
+              f"F2={eval_data.get('f2_score')}")
     print(f" Total elapsed:       {total_elapsed:.1f}s")
     print(f" Status:              {status}")
     if summary["errors"]:

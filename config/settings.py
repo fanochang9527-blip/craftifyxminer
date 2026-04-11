@@ -4,7 +4,8 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+# override=False：已存在的环境变量（含 compose 注入的 DATABASE_URL=...@db）不得被磁盘上的 .env 覆盖
+load_dotenv(override=False)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -74,8 +75,6 @@ DAILY_APIFY_BUDGET_USD = float(os.getenv("DAILY_APIFY_BUDGET_USD", "20"))
 MONTHLY_LLM_BUDGET_USD = float(os.getenv("MONTHLY_LLM_BUDGET_USD", "10"))
 
 # --- 发现引擎 ---
-EXPLORATION_RATIO = float(os.getenv("EXPLORATION_RATIO", "0.20"))
-DAILY_ANCHOR_COUNT = int(os.getenv("DAILY_ANCHOR_COUNT", "20"))
 MAX_FOLLOWING_PER_ANCHOR = int(os.getenv("MAX_FOLLOWING_PER_ANCHOR", "500"))
 
 # --- 深度抓取（每批人数，冒烟时可设 3–5）---
@@ -85,3 +84,28 @@ DEEP_SCRAPE_BATCH_SIZE = int(os.getenv("DEEP_SCRAPE_BATCH_SIZE", "50"))
 BIO_RULES_PATH = PROJECT_ROOT / "config" / "bio_rules.yaml"
 WEIGHTS_PATH = PROJECT_ROOT / "config" / "weights.yaml"
 APIFY_CONFIG_PATH = PROJECT_ROOT / "config" / "apify_config.yaml"
+MODEL_PATH = PROJECT_ROOT / "models" / "sps_model.joblib"
+MODEL_META_PATH = PROJECT_ROOT / "models" / "sps_model_meta.json"
+SELLABILITY_MODEL_PATH = PROJECT_ROOT / "models" / "sellability_model.joblib"
+SELLABILITY_MODEL_META_PATH = PROJECT_ROOT / "models" / "sellability_model_meta.json"
+
+# --- 双模型口径 ---
+# 资格模型阈值：>= 阈值判定为“建议联系”
+SELLABILITY_SCORE_THRESHOLD = float(os.getenv("SELLABILITY_SCORE_THRESHOLD", "60"))
+# 初始样本打标阈值：total_sales > 阈值为正样本，< 阈值为负样本（=阈值不参与）
+SELLABILITY_LABEL_SALES_THRESHOLD = float(os.getenv("SELLABILITY_LABEL_SALES_THRESHOLD", "50"))
+# SPS 作为“预测销量评分”：按 predicted_sales / normalizer 映射到 0-100
+SPS_SALES_NORMALIZER = float(os.getenv("SPS_SALES_NORMALIZER", "100"))
+# 工作台灰度阶段：1=只展示新字段不改默认排序；2=默认按双模型排序
+BD_WORKBENCH_PHASE = int(os.getenv("BD_WORKBENCH_PHASE", "1"))
+# 非 sellable 候选在双模型排序中的 SPS 降权系数（0-1）
+NON_SELLABLE_SPS_WEIGHT = float(os.getenv("NON_SELLABLE_SPS_WEIGHT", "0.35"))
+
+# --- 创作者类型 ---
+# oc_creator      = 原创 OC / 原创插画 / 动漫创作者  (XLS: B-原创OC)
+# vtuber          = VTuber / 虚拟 IP / 虚拟主播       (XLS: C-虚拟IP)
+# fan_artist      = 同人 / 二次创作                    (XLS: E-二创IP)
+# game_creator    = 游戏 / 官方 IP                     (XLS: A-官方IP)
+# content_creator = YouTube/TikTok 网红（非绘画类）    (当前种子数据无此类型)
+# unknown         = 无法判断
+CREATOR_TYPES = ("oc_creator", "vtuber", "fan_artist", "game_creator", "content_creator", "unknown")
