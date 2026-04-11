@@ -27,6 +27,8 @@ services:
     volumes:
       - app_logs:/app/logs
       - model_data:/app/models
+      # 种子文件放宿主机项目目录 data/（.gitignore），导入时容器内路径为 /app/data/…
+      - ./data:/app/data:ro
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:5000/health')\""]
       interval: 30s
