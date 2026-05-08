@@ -36,6 +36,7 @@ SEED_FILE=""
 ADMIN_USERNAME="admin"
 ADMIN_PASSWORD=""
 NON_INTERACTIVE=0
+SKIP_DB_REBUILD=0
 SKIP_GIT_PULL=0
 SKIP_HEALTHCHECK=0
 RELEASE_MARK="20260411"
@@ -51,6 +52,7 @@ usage() {
   --admin-username <name>    管理员用户名（默认 admin）
   --admin-password <pwd>     管理员密码（不传则交互输入）
   --non-interactive          非交互模式（必须提供 --seed-file 与 --admin-password）
+  --skip-db-rebuild          跳过数据库重建（仅更新代码+重启服务）
   --skip-git-pull            跳过 git fetch/pull
   --skip-healthcheck         跳过 /health 检查
   -h, --help                 显示帮助
@@ -132,6 +134,10 @@ parse_args() {
         ;;
       --non-interactive)
         NON_INTERACTIVE=1
+        shift
+        ;;
+      --skip-db-rebuild)
+        SKIP_DB_REBUILD=1
         shift
         ;;
       --skip-git-pull)
@@ -298,6 +304,26 @@ main() {
 
   cd "$PROJECT_DIR"
   load_env
+
+  if [[ "$SKIP_DB_REBUILD" -eq 1 ]]; then
+    echo ""
+    echo "============================================"
+    echo "  CraftifyX Miner 生产更新部署"
+    echo "  Release Mark: $RELEASE_MARK"
+    echo "============================================"
+    echo "项目目录:     $PROJECT_DIR"
+    echo "目标分支:     ${BRANCH:-<当前分支>}"
+    echo "操作说明:     更新代码 -> 重启服务（保留数据库）"
+    echo "============================================"
+    git_sync
+    start_services
+    health_check
+    echo ""
+    log "All done."
+    echo "Dashboard: http://$(hostname -I | awk '{print $1}')"
+    echo "Logs:      docker compose -f docker-compose.prod.yml logs -f"
+    return
+  fi
 
   if [[ -z "$SEED_FILE" ]]; then
     if [[ "$NON_INTERACTIVE" -eq 1 ]]; then
