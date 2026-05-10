@@ -71,14 +71,14 @@ STREAMLIT_PORT = int(os.getenv("STREAMLIT_PORT", "8501"))
 
 # --- 成本控制 ---
 MONTHLY_BUDGET_USD = float(os.getenv("MONTHLY_BUDGET_USD", "500"))
-DAILY_APIFY_BUDGET_USD = float(os.getenv("DAILY_APIFY_BUDGET_USD", "20"))
+DAILY_APIFY_BUDGET_USD = float(os.getenv("DAILY_APIFY_BUDGET_USD", "40"))
 MONTHLY_LLM_BUDGET_USD = float(os.getenv("MONTHLY_LLM_BUDGET_USD", "10"))
 
 # --- 发现引擎 ---
 MAX_FOLLOWING_PER_ANCHOR = int(os.getenv("MAX_FOLLOWING_PER_ANCHOR", "500"))
 
 # --- 深度抓取（每批人数，冒烟时可设 3–5）---
-DEEP_SCRAPE_BATCH_SIZE = int(os.getenv("DEEP_SCRAPE_BATCH_SIZE", "50"))
+DEEP_SCRAPE_BATCH_SIZE = int(os.getenv("DEEP_SCRAPE_BATCH_SIZE", "300"))
 
 # --- 路径 ---
 BIO_RULES_PATH = PROJECT_ROOT / "config" / "bio_rules.yaml"

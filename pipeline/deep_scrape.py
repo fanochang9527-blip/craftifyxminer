@@ -21,7 +21,10 @@ logger = logging.getLogger(__name__)
 
 
 def _get_pending_candidates(limit: int = DEEP_SCRAPE_BATCH_SIZE) -> list[dict]:
-    """Fetch creators that passed AI filter but haven't been deep-scraped in the last 30 days."""
+    """Fetch creators that passed AI filter but haven't been deep-scraped in the last 30 days.
+
+    当天新发现的候选人优先处理，避免 backlog 无限积压。
+    """
     return fetch_all(
         """SELECT id, username FROM creators
            WHERE bd_status IN ('rule_passed', 'ai_passed')
@@ -30,7 +33,9 @@ def _get_pending_candidates(limit: int = DEEP_SCRAPE_BATCH_SIZE) -> list[dict]:
                  WHERE creator_id IS NOT NULL
                    AND collected_at > NOW() - INTERVAL '30 days'
              )
-           ORDER BY first_seen_at ASC
+           ORDER BY
+               CASE WHEN discovered_date = CURRENT_DATE THEN 0 ELSE 1 END ASC,
+               first_seen_at ASC
            LIMIT %s""",
         (limit,),
     )
@@ -126,6 +131,37 @@ def _store_deep_scrape_results(items: list[dict]) -> dict:
     return {"profiles_updated": profiles_updated, "tweets_inserted": tweets_inserted}
 
 
+def _log_daily_consumption_alert() -> None:
+    """检查当天新发现的 passed 候选人消费率，未消费完时打印预警。"""
+    row = fetch_one(
+        """SELECT
+               COUNT(*) FILTER (WHERE bd_status IN ('rule_passed','ai_passed')) AS total_passed,
+               COUNT(*) FILTER (
+                   WHERE bd_status IN ('rule_passed','ai_passed')
+                     AND EXISTS (SELECT 1 FROM tweets t WHERE t.creator_id = creators.id)
+               ) AS deep_scraped
+           FROM creators
+           WHERE discovered_date = CURRENT_DATE"""
+    )
+    if not row:
+        return
+    total_passed = int(row["total_passed"] or 0)
+    deep_scraped = int(row["deep_scraped"] or 0)
+    if total_passed > 0:
+        rate = deep_scraped / total_passed
+        if rate < 1.0:
+            logger.warning(
+                "DAILY_CONSUMPTION_ALERT: %d/%d (%.1f%%) of today's passed creators have been deep-scraped. "
+                "Consider increasing DEEP_SCRAPE_BATCH_SIZE (currently %d).",
+                deep_scraped, total_passed, rate * 100, DEEP_SCRAPE_BATCH_SIZE,
+            )
+        else:
+            logger.info(
+                "Daily consumption OK: %d/%d (100%%) today's passed creators deep-scraped.",
+                deep_scraped, total_passed,
+            )
+
+
 def trigger_deep_scrape_batch(limit: int | None = None) -> dict:
     """Trigger deep-scrape for the next batch of filtered candidates.
 
@@ -179,6 +215,7 @@ def trigger_deep_scrape_batch(limit: int | None = None) -> dict:
                 (stats["profiles_updated"],),
             )
 
+    _log_daily_consumption_alert()
     return {"candidates": len(candidates), "run_id": run_id, "budget_ok": True}
 
 
