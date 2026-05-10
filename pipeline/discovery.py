@@ -103,6 +103,25 @@ def trigger_l1_scan(
         stored = process_dataset(client, dataset_id)
         logger.info("L1 results processed: %s", stored)
 
+        # 更新 discovery_batches 计数（raw_discovered / after_ai_filter）
+        store_stats = stored.get("store", {})
+        filter_stats = stored.get("filter", {})
+        with get_cursor() as cur:
+            cur.execute(
+                """UPDATE discovery_batches
+                   SET raw_discovered = %s,
+                       after_ai_filter = %s
+                   WHERE id = (
+                       SELECT id FROM discovery_batches
+                       WHERE batch_date = CURRENT_DATE
+                       ORDER BY created_at DESC LIMIT 1
+                   )""",
+                (
+                    store_stats.get("total", 0),
+                    filter_stats.get("rule_passed", 0) + filter_stats.get("ai_passed", 0),
+                ),
+            )
+
         new_usernames = stored.get("store", {}).get("usernames", set())
         if not new_usernames:
             all_usernames = set()
