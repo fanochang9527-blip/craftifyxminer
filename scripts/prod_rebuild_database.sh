@@ -38,7 +38,7 @@ if [[ "${WIPE_PUBLIC_SCHEMA:-}" == "yes" ]]; then
   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT ALL ON SCHEMA public TO ${U};"
 fi
 
-echo -e "${GREEN}[2/5]${NC} Applying schema.sql + indexes.sql + all migrations ..."
+echo -e "${GREEN}[2/5]${NC} Applying schema.sql + indexes.sql ..."
 _run_sql() {
   local file="$1"
   if command -v psql &>/dev/null; then
@@ -55,13 +55,18 @@ _run_sql() {
 _run_sql "$PROJECT_DIR/db/schema.sql"
 _run_sql "$PROJECT_DIR/db/indexes.sql"
 
-# 自动按文件名排序执行所有迁移脚本（001, 002, ...）
-for mig in "$PROJECT_DIR/db/migrations/"*.sql; do
-  if [[ -f "$mig" ]]; then
-    echo "  -> $(basename "$mig")"
-    _run_sql "$mig"
-  fi
-done
+# 全新数据库（WIPE）时 schema.sql 已是最新，跳过迁移；升级场景执行所有迁移
+if [[ "${WIPE_PUBLIC_SCHEMA:-}" == "yes" ]]; then
+  echo -e "${GREEN}[2b/5]${NC} WIPE mode — skipping migrations (schema.sql is already up-to-date)"
+else
+  echo -e "${GREEN}[2b/5]${NC} Applying all migrations ..."
+  for mig in "$PROJECT_DIR/db/migrations/"*.sql; do
+    if [[ -f "$mig" ]]; then
+      echo "  -> $(basename "$mig")"
+      _run_sql "$mig"
+    fi
+  done
+fi
 
 echo -e "${GREEN}[3/5]${NC} Done SQL. Next: create admin (interactive credentials):"
 echo "  docker compose -f docker-compose.prod.yml run --rm server python -m auth.manage create-admin --username ADMIN --password '...'"
