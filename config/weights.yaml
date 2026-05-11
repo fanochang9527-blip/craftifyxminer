@@ -6,57 +6,47 @@ oc_creator:
   engagement: 0.15
   virality: 0.10
   posting: 0.05
-  monetization: 0.20
+  monetization: 0.25
   growth: 0.05
-  circle_influence_score: 0.05
-  character_consistency: 0.20
+  character_consistency: 0.25
   community: 0.05
-  data_confidence: 0.05
 
 vtuber:
   audience: 0.15
   engagement: 0.20
   virality: 0.15
   posting: 0.10
-  monetization: 0.10
+  monetization: 0.15
   growth: 0.10
-  circle_influence_score: 0.05
-  character_consistency: 0.05
+  character_consistency: 0.10
   community: 0.05
-  data_confidence: 0.05
 
 fan_artist:
   audience: 0.10
   engagement: 0.15
   virality: 0.15
   posting: 0.10
-  monetization: 0.15
+  monetization: 0.20
   growth: 0.05
-  circle_influence_score: 0.10
-  character_consistency: 0.05
-  community: 0.10
-  data_confidence: 0.05
+  character_consistency: 0.10
+  community: 0.15
 
 game_creator:
   audience: 0.15
   engagement: 0.10
   virality: 0.10
   posting: 0.05
-  monetization: 0.20
+  monetization: 0.25
   growth: 0.10
-  circle_influence_score: 0.05
-  character_consistency: 0.10
+  character_consistency: 0.15
   community: 0.10
-  data_confidence: 0.05
 
 content_creator:
   audience: 0.15
   engagement: 0.15
   virality: 0.10
   posting: 0.15
-  monetization: 0.10
+  monetization: 0.15
   growth: 0.10
-  circle_influence_score: 0.05
-  character_consistency: 0.05
+  character_consistency: 0.10
   community: 0.10
-  data_confidence: 0.05

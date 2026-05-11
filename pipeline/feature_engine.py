@@ -26,15 +26,6 @@ def _load_bio_rules() -> dict:
     return _bio_rules
 
 
-def circle_influence_score_from_seed_connections(seed_connections: int) -> float:
-    """Miner 7.0 圈层影响力分数，替代原 fan_creator_ratio。
-
-    归一化到 0-100，与 Hub 阈值 (>=5 个 Seed) 对齐：5 个及以上 -> 100 分。
-    """
-    n = max(0, int(seed_connections))
-    return min(100.0, float(n) * 20.0)
-
-
 def _parse_tweet_created_at(value: object):
     """将推文时间统一为 UTC 带时区，避免与 utcnow 相减时出现 naive/aware 混用。"""
     from datetime import datetime, timezone
@@ -215,18 +206,12 @@ def calc_community(tweets: list[dict], max_community: int = 100) -> float:
     return min(raw, 100.0)
 
 
-def calc_data_confidence(account_age_years: float, profile_completeness: float) -> float:
-    """min(account_age*0.6 + completeness*0.4, 1.0) * 100"""
-    score = min(account_age_years * 0.6 + profile_completeness * 0.4, 1.0)
-    return score * 100.0
-
-
 # ------------------------------------------------------------------
 # 高层 API
 # ------------------------------------------------------------------
 
 def compute_features_for_creator(creator_id: int) -> dict | None:
-    """Compute all 10 features for one creator and upsert into creator_features."""
+    """Compute all 8 features for one creator and upsert into creator_features."""
     creator = fetch_one("SELECT * FROM creators WHERE id = %s", (creator_id,))
     if not creator:
         return None
@@ -249,19 +234,6 @@ def compute_features_for_creator(creator_id: int) -> dict | None:
     top3_avg = sum(sorted_eng[:3]) / min(len(sorted_eng), 3) if sorted_eng else 0
     monthly_avg = sum(engagement_vals) / len(engagement_vals) if engagement_vals else 0
 
-    seed_row = fetch_one(
-        """SELECT COUNT(*) AS cnt FROM creator_graph cg
-           JOIN creators c ON c.id = cg.creator_id
-           WHERE cg.connected_creator_id = %s AND c.is_seed = true""",
-        (creator_id,),
-    )
-    seed_connections = int(seed_row["cnt"]) if seed_row else 0
-
-    account_age_years = (creator.get("account_age") or 1) / 365.0
-    has_bio = 1.0 if bio else 0.0
-    has_website = 1.0 if website else 0.0
-    profile_completeness = (has_bio * 0.5 + has_website * 0.3 + (0.2 if followers > 0 else 0.0))
-
     features = {
         "audience_score": calc_audience(followers, following),
         "engagement_score": calc_engagement(tweets, followers),
@@ -269,10 +241,8 @@ def compute_features_for_creator(creator_id: int) -> dict | None:
         "posting_score": calc_posting(tweets),
         "monetization_score": calc_monetization(bio, website),
         "growth_score": calc_growth(),
-        "circle_influence_score": circle_influence_score_from_seed_connections(seed_connections),
         "character_consistency": calc_character_consistency(tweets),
         "community_score": calc_community(tweets),
-        "data_confidence": calc_data_confidence(account_age_years, profile_completeness),
     }
 
     with get_cursor() as cur:
@@ -280,12 +250,10 @@ def compute_features_for_creator(creator_id: int) -> dict | None:
             """INSERT INTO creator_features
                    (creator_id, audience_score, engagement_score, virality_score,
                     growth_score, posting_score, monetization_score,
-                    circle_influence_score, character_consistency,
-                    community_score, data_confidence)
+                    character_consistency, community_score)
                VALUES (%(cid)s, %(audience_score)s, %(engagement_score)s, %(virality_score)s,
                        %(growth_score)s, %(posting_score)s, %(monetization_score)s,
-                       %(circle_influence_score)s, %(character_consistency)s,
-                       %(community_score)s, %(data_confidence)s)
+                       %(character_consistency)s, %(community_score)s)
                ON CONFLICT (creator_id) DO UPDATE SET
                    audience_score = EXCLUDED.audience_score,
                    engagement_score = EXCLUDED.engagement_score,
@@ -293,15 +261,13 @@ def compute_features_for_creator(creator_id: int) -> dict | None:
                    growth_score = EXCLUDED.growth_score,
                    posting_score = EXCLUDED.posting_score,
                    monetization_score = EXCLUDED.monetization_score,
-                   circle_influence_score = EXCLUDED.circle_influence_score,
                    character_consistency = EXCLUDED.character_consistency,
                    community_score = EXCLUDED.community_score,
-                   data_confidence = EXCLUDED.data_confidence,
                    calculated_at = NOW()""",
             {"cid": creator_id, **features},
         )
 
-    return {"creator_id": creator_id, "seed_connections": seed_connections, **features}
+    return {"creator_id": creator_id, **features}
 
 
 def compute_all_pending() -> int:

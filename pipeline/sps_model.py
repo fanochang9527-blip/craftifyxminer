@@ -29,10 +29,8 @@ FEATURE_COLS = [
     "posting_score",
     "monetization_score",
     "growth_score",
-    "circle_influence_score",
     "character_consistency",
     "community_score",
-    "data_confidence",
 ]
 
 

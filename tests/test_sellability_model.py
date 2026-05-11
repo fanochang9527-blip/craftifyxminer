@@ -67,10 +67,8 @@ class TestSingleClassSupport:
             "posting_score": 1,
             "monetization_score": 1,
             "growth_score": 1,
-            "circle_influence_score": 1,
             "character_consistency": 1,
             "community_score": 1,
-            "data_confidence": 1,
             "creator_type": "unknown",
         }
         assert predict_sellability(row) == 100.0

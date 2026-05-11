@@ -1,4 +1,4 @@
-"""10 维雷达图组件 — Plotly go.Scatterpolar。"""
+"""8 维雷达图组件 — Plotly go.Scatterpolar。"""
 
 from __future__ import annotations
 
@@ -11,10 +11,8 @@ DEFAULT_DIMENSION_LABELS = [
     "Posting",
     "Monetization",
     "Growth",
-    "Circle Influence",
     "Char. Consistency",
     "Community",
-    "Data Confidence",
 ]
 
 DIMENSION_KEYS = [
@@ -24,10 +22,8 @@ DIMENSION_KEYS = [
     "posting_score",
     "monetization_score",
     "growth_score",
-    "circle_influence_score",
     "character_consistency",
     "community_score",
-    "data_confidence",
 ]
 
 
@@ -36,7 +32,7 @@ def create_radar_chart(
     title: str = "Creator Profile",
     labels: list[str] | None = None,
 ) -> go.Figure:
-    """Create a 10-dimensional radar chart for a creator's feature scores.
+    """Create an 8-dimensional radar chart for a creator's feature scores.
 
     Args:
         features: dict with keys matching DIMENSION_KEYS, values 0-100
