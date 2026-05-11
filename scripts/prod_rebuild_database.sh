@@ -38,20 +38,30 @@ if [[ "${WIPE_PUBLIC_SCHEMA:-}" == "yes" ]]; then
   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT ALL ON SCHEMA public TO ${U};"
 fi
 
-echo -e "${GREEN}[2/5]${NC} Applying schema.sql + indexes.sql + migrations 004–006 ..."
-if command -v psql &>/dev/null; then
-  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$PROJECT_DIR/db/schema.sql"
-  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$PROJECT_DIR/db/indexes.sql"
-  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$PROJECT_DIR/db/migrations/004_sps_ml_refactor.sql"
-  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$PROJECT_DIR/db/migrations/005_seed_platform_account_unique.sql"
-  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$PROJECT_DIR/db/migrations/006_dual_model_scores.sql"
-else
-  docker run --rm \
-    -v "$PROJECT_DIR/db:/sql:ro" \
-    --network host \
-    postgres:18-alpine \
-    sh -c "psql '$DATABASE_URL' -v ON_ERROR_STOP=1 -f /sql/schema.sql && psql '$DATABASE_URL' -v ON_ERROR_STOP=1 -f /sql/indexes.sql && psql '$DATABASE_URL' -v ON_ERROR_STOP=1 -f /sql/migrations/004_sps_ml_refactor.sql && psql '$DATABASE_URL' -v ON_ERROR_STOP=1 -f /sql/migrations/005_seed_platform_account_unique.sql && psql '$DATABASE_URL' -v ON_ERROR_STOP=1 -f /sql/migrations/006_dual_model_scores.sql"
-fi
+echo -e "${GREEN}[2/5]${NC} Applying schema.sql + indexes.sql + all migrations ..."
+_run_sql() {
+  local file="$1"
+  if command -v psql &>/dev/null; then
+    psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$file"
+  else
+    docker run --rm \
+      -v "$PROJECT_DIR/db:/sql:ro" \
+      --network host \
+      postgres:18-alpine \
+      psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "/sql/${file#$PROJECT_DIR/db/}"
+  fi
+}
+
+_run_sql "$PROJECT_DIR/db/schema.sql"
+_run_sql "$PROJECT_DIR/db/indexes.sql"
+
+# 自动按文件名排序执行所有迁移脚本（001, 002, ...）
+for mig in "$PROJECT_DIR/db/migrations/"*.sql; do
+  if [[ -f "$mig" ]]; then
+    echo "  -> $(basename "$mig")"
+    _run_sql "$mig"
+  fi
+done
 
 echo -e "${GREEN}[3/5]${NC} Done SQL. Next: create admin (interactive credentials):"
 echo "  docker compose -f docker-compose.prod.yml run --rm server python -m auth.manage create-admin --username ADMIN --password '...'"
