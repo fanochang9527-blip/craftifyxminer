@@ -1,5 +1,5 @@
 -- CraftifyX Miner 6.0 / 7.0 对齐 — 数据库 Schema (9 张核心表)
--- creator_features 第 7 维：圈层影响力 circle_influence_score（Miner 7.0），已替代旧版 fan_creator_ratio（粉丝抽样占比）。
+-- creator_features 8 维指标（已去除 circle_influence_score、data_confidence）
 -- 执行（库名/用户以 .env 为准，默认）: psql -U miner -d craftifyx_miner -f db/schema.sql
 
 -- 1. creators (主档案)
@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS tweets (
     collected_at TIMESTAMP DEFAULT NOW()
 );
 
--- 3. creator_features (10 维指标)
+-- 3. creator_features (8 维指标)
 CREATE TABLE IF NOT EXISTS creator_features (
     id SERIAL PRIMARY KEY,
     creator_id INTEGER REFERENCES creators(id) UNIQUE,
@@ -59,11 +59,8 @@ CREATE TABLE IF NOT EXISTS creator_features (
     growth_score FLOAT,
     posting_score FLOAT,
     monetization_score FLOAT,
-    -- 圈层影响力 (Miner 7.0): 由「被多少 Seed 关注」归一化到 0–100，见 feature_engine / sps_scorer
-    circle_influence_score FLOAT,
     character_consistency FLOAT,
-    community_score FLOAT,
-    data_confidence FLOAT
+    community_score FLOAT
 );
 
 -- 4. creator_graph (关系图谱)

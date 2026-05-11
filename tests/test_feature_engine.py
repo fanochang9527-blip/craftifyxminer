@@ -14,12 +14,10 @@ from pipeline.feature_engine import (
     calc_audience,
     calc_character_consistency,
     calc_community,
-    calc_data_confidence,
     calc_engagement,
     calc_monetization,
     calc_posting,
     calc_virality,
-    circle_influence_score_from_seed_connections,
 )
 
 
@@ -146,23 +144,6 @@ class TestMonetization:
         assert calc_monetization("Artist", "https://etsy.com/shop/myshop") == 90.0
 
 
-class TestCircleInfluence:
-    def test_zero_connections(self):
-        assert circle_influence_score_from_seed_connections(0) == 0.0
-
-    def test_one_connection(self):
-        assert circle_influence_score_from_seed_connections(1) == 20.0
-
-    def test_five_connections_max(self):
-        assert circle_influence_score_from_seed_connections(5) == 100.0
-
-    def test_above_five_still_100(self):
-        assert circle_influence_score_from_seed_connections(10) == 100.0
-
-    def test_negative_clamped(self):
-        assert circle_influence_score_from_seed_connections(-3) == 0.0
-
-
 class TestCharacterConsistency:
     def test_no_tweets(self):
         assert calc_character_consistency([]) == 50.0
@@ -202,14 +183,3 @@ class TestCommunity:
         score = calc_community(tweets)
         assert score >= 0
 
-
-class TestDataConfidence:
-    def test_new_empty_account(self):
-        assert calc_data_confidence(0, 0) == 0.0
-
-    def test_mature_complete(self):
-        assert calc_data_confidence(2.0, 1.0) == 100.0
-
-    def test_partial(self):
-        score = calc_data_confidence(0.5, 0.5)
-        assert 40 < score < 60

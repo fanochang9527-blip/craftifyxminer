@@ -264,10 +264,8 @@ radar:
   posting: "Posting"
   monetization: "Monetization"
   growth: "Growth"
-  circle_influence: "Circle Influence"
   character_consistency: "Char. Consistency"
   community: "Community"
-  data_confidence: "Data Confidence"
 
 chart:
   count: "Count"

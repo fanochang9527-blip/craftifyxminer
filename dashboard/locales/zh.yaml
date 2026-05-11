@@ -264,10 +264,8 @@ radar:
   posting: "发帖"
   monetization: "变现"
   growth: "增长"
-  circle_influence: "圈层影响力"
   character_consistency: "人设一致性"
   community: "社区"
-  data_confidence: "数据置信度"
 
 chart:
   count: "数量"

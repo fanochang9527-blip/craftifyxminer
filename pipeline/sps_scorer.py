@@ -28,10 +28,8 @@ FEATURE_KEYS = [
     "posting_score",
     "monetization_score",
     "growth_score",
-    "circle_influence_score",
     "character_consistency",
     "community_score",
-    "data_confidence",
 ]
 
 WEIGHT_KEYS = [
@@ -41,10 +39,8 @@ WEIGHT_KEYS = [
     "posting",
     "monetization",
     "growth",
-    "circle_influence_score",
     "character_consistency",
     "community",
-    "data_confidence",
 ]
 
 
@@ -101,12 +97,11 @@ def calc_sellability(features: dict, creator_type: str) -> float:
     except Exception:
         logger.debug("Sellability model prediction failed — using heuristic fallback")
 
-    # 冷启动启发式：偏重变现/互动/社区与数据置信度
+    # 冷启动启发式：偏重变现/互动/社区
     monetization = float(features.get("monetization_score") or 0)
     engagement = float(features.get("engagement_score") or 0)
     community = float(features.get("community_score") or 0)
-    confidence = float(features.get("data_confidence") or 0)
-    heuristic = monetization * 0.4 + engagement * 0.25 + community * 0.2 + confidence * 0.15
+    heuristic = monetization * 0.45 + engagement * 0.30 + community * 0.25
     return round(max(0.0, min(100.0, heuristic)), 2)
 
 
@@ -189,7 +184,7 @@ def score_creator(creator_id: int) -> dict | None:
                 is_sellable,
                 predicted_sales,
                 sps,
-                features.get("data_confidence", 0),
+                0.0,
                 centrality,
                 seed_connections,
                 contact_prob,

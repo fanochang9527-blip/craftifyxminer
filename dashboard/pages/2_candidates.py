@@ -146,8 +146,7 @@ query = f"""
            cs.sps_score, cs.centrality_tier, cs.seed_connections,
            cf.audience_score, cf.engagement_score, cf.virality_score,
            cf.posting_score, cf.monetization_score, cf.growth_score,
-           cf.circle_influence_score, cf.character_consistency,
-           cf.community_score, cf.data_confidence
+           cf.character_consistency, cf.community_score
     FROM creators c
     JOIN creator_scores cs ON cs.creator_id = c.id
     LEFT JOIN creator_features cf ON cf.creator_id = c.id
@@ -210,15 +209,13 @@ _TIER_STYLE = {
 _FEATURE_KEYS = [
     "audience_score", "engagement_score", "virality_score",
     "posting_score", "monetization_score", "growth_score",
-    "circle_influence_score", "character_consistency",
-    "community_score", "data_confidence",
+    "character_consistency", "community_score",
 ]
 
 _RADAR_LABELS = [
     t("radar.audience"), t("radar.engagement"), t("radar.virality"),
     t("radar.posting"), t("radar.monetization"), t("radar.growth"),
-    t("radar.circle_influence"), t("radar.character_consistency"),
-    t("radar.community"), t("radar.data_confidence"),
+    t("radar.character_consistency"), t("radar.community"),
 ]
 
 
@@ -238,7 +235,7 @@ def _build_signals(c: dict) -> str:
         ("growth_score", 70, "radar.growth"),
         ("community_score", 80, "radar.community"),
         ("character_consistency", 70, "radar.character_consistency"),
-        ("circle_influence_score", 70, "radar.circle_influence"),
+
     ]
     for key, threshold, i18n_key in score_checks:
         val = c.get(key) or 0
@@ -248,10 +245,6 @@ def _build_signals(c: dict) -> str:
     monetization = c.get("monetization_score") or 0
     if monetization < 20:
         tags.append(f"⚠️ {t('candidates.sig_no_monetization')}")
-
-    confidence = c.get("data_confidence") or 0
-    if 0 < confidence < 60:
-        tags.append(f"⚠️ {t('candidates.sig_low_confidence')}")
 
     return " ".join(tags) if tags else "—"
 
