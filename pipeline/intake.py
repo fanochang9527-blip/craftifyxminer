@@ -5,18 +5,64 @@ import logging
 
 from apify_client import ApifyClient
 
-from db.connection import get_cursor
+from db.connection import fetch_all, get_cursor
 
 logger = logging.getLogger(__name__)
 
 
+def _store_graph_relations(relations: list[tuple[str, str]]) -> int:
+    """Batch-write following relations into creator_graph.
+
+    Returns number of rows inserted.
+    """
+    if not relations:
+        return 0
+
+    unique_relations = list(set(relations))
+    all_handles = set()
+    for src, tgt in unique_relations:
+        all_handles.add(src)
+        all_handles.add(tgt)
+
+    rows = fetch_all(
+        "SELECT id, username FROM creators WHERE username = ANY(%s)",
+        (list(all_handles),),
+    )
+    handle_to_id = {row["username"].lower(): row["id"] for row in rows}
+
+    values = []
+    for src, tgt in unique_relations:
+        src_id = handle_to_id.get(src)
+        tgt_id = handle_to_id.get(tgt)
+        if src_id and tgt_id:
+            values.append((src_id, tgt_id, "follow"))
+
+    if not values:
+        return 0
+
+    from psycopg2.extras import execute_values
+
+    with get_cursor() as cur:
+        execute_values(
+            cur,
+            """INSERT INTO creator_graph (creator_id, connected_creator_id, connection_type)
+               VALUES %s
+               ON CONFLICT DO NOTHING""",
+            values,
+            template="(%s, %s, %s)",
+        )
+        return cur.rowcount
+
+
 def store_dataset_items(items: list[dict]) -> dict:
-    """Upsert Apify dataset items into creators table.
+    """Upsert Apify dataset items into creators table + write following edges.
 
     Returns: {total, inserted, updated, usernames: set[str]}.
     """
     inserted = updated = 0
     usernames: set[str] = set()
+    relations: list[tuple[str, str]] = []
+
     for item in items:
         username = (
             item.get("username") or item.get("screen_name")
@@ -26,6 +72,13 @@ def store_dataset_items(items: list[dict]) -> dict:
             continue
         username = username.lstrip("@").lower()
         usernames.add(username)
+
+        # Extract following relation from Apify source metadata
+        source = item.get("inputSource") or item.get("followedBy") or ""
+        if source:
+            source = source.lstrip("@").lower()
+            if source != username:
+                relations.append((source, username))
 
         bio = item.get("description") or item.get("bio") or ""
         website = item.get("website") or item.get("url") or ""
@@ -54,6 +107,10 @@ def store_dataset_items(items: list[dict]) -> dict:
                 inserted += 1
             else:
                 updated += 1
+
+    graph_inserted = _store_graph_relations(relations)
+    if graph_inserted:
+        logger.info("Inserted %d creator_graph edges", graph_inserted)
 
     return {"total": len(items), "inserted": inserted, "updated": updated, "usernames": usernames}
 

@@ -73,6 +73,9 @@ CREATE TABLE IF NOT EXISTS creator_graph (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_graph_unique_relation
+    ON creator_graph (creator_id, connected_creator_id, connection_type);
+
 -- 5. creator_scores (SPS 评分 + 中心度)
 CREATE TABLE IF NOT EXISTS creator_scores (
     id SERIAL PRIMARY KEY,
