@@ -4,3 +4,6 @@ gatherUsageStats = false
 [server]
 enableCORS = false
 enableXsrfProtection = false
+enableWebsocketCompression = false
+fileWatcherType = "none"
+runOnSave = false

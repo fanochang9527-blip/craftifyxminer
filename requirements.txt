@@ -25,6 +25,7 @@ apify-shared>=1.1.2,<2
 
 # Dashboard
 streamlit==1.41.*
+tornado==6.4.2
 plotly==6.0.*
 
 # 数据处理
