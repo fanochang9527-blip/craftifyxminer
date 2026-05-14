@@ -21,3 +21,4 @@ CREATE INDEX IF NOT EXISTS idx_scores_centrality ON creator_scores(centrality_ti
 
 CREATE INDEX IF NOT EXISTS idx_cost_date ON cost_tracking(date);
 CREATE INDEX IF NOT EXISTS idx_batches_date ON discovery_batches(batch_date);
+CREATE INDEX IF NOT EXISTS idx_creators_last_scraped_anchor ON creators(last_scraped_as_anchor);
