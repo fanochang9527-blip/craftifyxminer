@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS creators (
     bd_decision VARCHAR(20),
     bd_decision_note TEXT,
     last_bd_update TIMESTAMP,
+    last_scraped_as_anchor TIMESTAMP,
     first_seen_at TIMESTAMP DEFAULT NOW()
 );
 

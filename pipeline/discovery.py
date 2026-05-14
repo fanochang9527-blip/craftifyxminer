@@ -1,17 +1,22 @@
-"""每日发现引擎 — 全量种子锚点 + L1 扫描。
+"""每日发现引擎 — 锚点轮换 + 冷却期 + 高价值优先。
 
-选取所有 is_seed=true 的种子，按 last_used_as_anchor 轮换爬取其 following 列表。
+按冷却期过滤已近期扫描过的锚点，优先选取高价值锚点，同价值按轮换顺序
+（last_scraped_as_anchor 升序）排布，确保每个锚点长期内都能被照顾到。
 """
 
 import logging
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 
 import yaml
 from apify_client import ApifyClient
 
 from config.settings import (
+    ANCHOR_HIGH_VALUE_COOLDOWN_DAYS,
+    ANCHOR_LOW_VALUE_COOLDOWN_DAYS,
+    ANCHOR_NORMAL_COOLDOWN_DAYS,
     APIFY_API_TOKEN,
     APIFY_CONFIG_PATH,
+    DAILY_ANCHOR_COUNT,
     DAILY_APIFY_BUDGET_USD,
     MAX_FOLLOWING_PER_ANCHOR,
 )
@@ -20,31 +25,88 @@ from db.connection import execute, fetch_all, fetch_one, get_cursor
 logger = logging.getLogger(__name__)
 
 
+def _anchor_priority_and_cooldown(row: dict) -> tuple[int, int]:
+    """Return (priority, cooldown_days) for an anchor row.
+
+    Priority: higher number = picked first.
+    """
+    if row["is_seed"]:
+        return 3, ANCHOR_HIGH_VALUE_COOLDOWN_DAYS
+    if row["bd_status"] == "interested":
+        return 2, ANCHOR_NORMAL_COOLDOWN_DAYS
+    return 1, ANCHOR_LOW_VALUE_COOLDOWN_DAYS
+
+
 def generate_daily_seeds() -> list[dict]:
-    """Return a list of anchor dicts for ALL seeds + BD-passed creators, rotated by last usage."""
+    """Return anchor dicts with cooldown rotation and value-based priority.
+
+    Rules:
+      1. Cooldown: skip anchors scanned within their tier's cooldown window.
+      2. Priority: is_seed (3) > interested (2) > rejected_unfit (1).
+      3. Rotation: within same priority, pick least-recently-scanned first.
+      4. Cap: at most DAILY_ANCHOR_COUNT anchors per day.
+      5. Fallback: if cooldown leaves us short, relax cooldown and fill by
+         last_scraped_as_anchor ASC (oldest first).
+    """
     rows = fetch_all(
-        """SELECT id, username, is_seed,
-                  COALESCE(
-                      (SELECT MAX(created_at) FROM discovery_batches
-                       WHERE username = ANY(anchor_seeds)), '1970-01-01'
-                  ) AS last_used
+        """SELECT id, username, is_seed, bd_status, last_scraped_as_anchor
            FROM creators
            WHERE is_seed = true
-              OR (is_seed = false AND bd_status IN ('interested', 'rejected_unfit'))
-           ORDER BY last_used ASC"""
+              OR (is_seed = false AND bd_status IN ('interested', 'rejected_unfit'))"""
     )
+
+    now = datetime.now(timezone.utc)
+
+    # Decorate each row with priority and cooldown deadline
+    decorated: list[tuple[int, datetime | None, dict]] = []
+    for r in rows:
+        priority, cooldown_days = _anchor_priority_and_cooldown(r)
+        last_scraped = r["last_scraped_as_anchor"]
+        # Treat naive datetimes as UTC to match PostgreSQL TIMESTAMP WITH TIME ZONE
+        if last_scraped and last_scraped.tzinfo is None:
+            last_scraped = last_scraped.replace(tzinfo=timezone.utc)
+        deadline = last_scraped + timedelta(days=cooldown_days) if last_scraped else None
+        decorated.append((priority, deadline, r))
+
+    # Phase 1: pick anchors whose cooldown has expired (or never scraped)
+    eligible = [d for d in decorated if d[1] is None or d[1] <= now]
+    eligible.sort(key=lambda d: (-d[0], d[1] is not None, d[2]["last_scraped_as_anchor"] or datetime.min.replace(tzinfo=timezone.utc)))
+    # Sort key explanation:
+    #   -d[0]  -> higher priority first
+    #   d[1] is not None -> put never-scraped (None) before scraped ones
+    #   last_scraped_as_anchor ASC -> oldest first
+
+    selected = eligible[:DAILY_ANCHOR_COUNT]
+
+    # Phase 2: if still short, relax cooldown and fill from all candidates
+    shortfall = DAILY_ANCHOR_COUNT - len(selected)
+    if shortfall > 0:
+        already_ids = {d[2]["id"] for d in selected}
+        remaining = [d for d in decorated if d[2]["id"] not in already_ids]
+        # Sort by priority desc, then last_scraped_as_anchor asc (oldest first, None first)
+        remaining.sort(key=lambda d: (-d[0], d[2]["last_scraped_as_anchor"] is not None, d[2]["last_scraped_as_anchor"] or datetime.min.replace(tzinfo=timezone.utc)))
+        selected.extend(remaining[:shortfall])
 
     anchors = [
         {
-            "username": r["username"],
-            "strategy": "seed_following" if r["is_seed"] else "bd_following",
-            "seed_id": r["id"],
+            "username": d[2]["username"],
+            "strategy": "seed_following" if d[2]["is_seed"] else "bd_following",
+            "seed_id": d[2]["id"],
         }
-        for r in rows
+        for d in selected
     ]
 
+    # Persist rotation state
+    anchor_ids = [d[2]["id"] for d in selected]
     usernames = [a["username"] for a in anchors]
     with get_cursor() as cur:
+        if anchor_ids:
+            cur.execute(
+                """UPDATE creators
+                   SET last_scraped_as_anchor = NOW()
+                   WHERE id = ANY(%s)""",
+                (anchor_ids,),
+            )
         cur.execute(
             """INSERT INTO discovery_batches
                    (batch_date, batch_type, anchor_seeds, exploration_ratio, raw_discovered)
@@ -54,7 +116,10 @@ def generate_daily_seeds() -> list[dict]:
 
     seed_cnt = sum(1 for a in anchors if a["strategy"] == "seed_following")
     passed_cnt = len(anchors) - seed_cnt
-    logger.info("Generated %d anchors (%d seeds + %d passed creators)", len(anchors), seed_cnt, passed_cnt)
+    logger.info(
+        "Generated %d anchors (%d seeds + %d passed creators) out of %d candidates (cap=%d)",
+        len(anchors), seed_cnt, passed_cnt, len(rows), DAILY_ANCHOR_COUNT,
+    )
     return anchors
 
 
