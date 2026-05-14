@@ -1,7 +1,8 @@
 """定时任务编排 — APScheduler.
 
 Schedule:
-  08:00 — 全链路: 锚点 → L1 扫描 → 深度抓取 → 特征 → SPS
+  08:00 — 全链路: 锚点 → L1 扫描 → 深度抓取 → 特征 → Backfill → SPS
+  09:00 — 补全 creator_graph 中心度回刷（幂等兜底）
   23:00 — 生成日报数据, 更新成本统计, 种子晋升
 """
 
@@ -24,6 +25,19 @@ def job_daily_pipeline():
     from pipeline.runner import run_full_pipeline
     result = run_full_pipeline()
     logger.info("Daily pipeline finished: %s", result.get("status", "UNKNOWN"))
+
+
+@scheduler.scheduled_job("cron", hour=9, minute=0, id="backfill_graph")
+def job_backfill_graph():
+    """Backfill creator_graph from anchor_seed and recalculate centrality tiers."""
+    logger.info("=== Job: backfill_graph ===")
+    from pipeline.backfill import run_backfill
+    result = run_backfill()
+    logger.info(
+        "Backfill finished: %d edges inserted, %d scores updated",
+        result.get("relations_inserted", 0),
+        result.get("scores_updated", 0),
+    )
 
 
 @scheduler.scheduled_job("cron", hour=23, minute=0, id="daily_summary")

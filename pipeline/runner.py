@@ -1,4 +1,4 @@
-"""Full pipeline runner — 7 步日常流水线。
+"""Full pipeline runner — 8 步日常流水线。
 
 步骤:
   1. Generate anchors (全量种子)
@@ -6,8 +6,9 @@
   3. Deep scrape
   4. Type classification
   5. Feature computation
-  6. SPS prediction
-  7. Model evaluation
+  6. Backfill creator_graph & centrality
+  7. SPS prediction
+  8. Model evaluation
 """
 
 from __future__ import annotations
@@ -63,10 +64,11 @@ def run_full_pipeline(
     anchors: list[dict] | None = None,
     deep_limit: int | None = None,
 ) -> dict:
-    """Execute the full daily 7-step pipeline.
+    """Execute the full daily 8-step pipeline.
 
     Returns a summary dict of all step results.
     """
+    from pipeline.backfill import run_backfill
     from pipeline.deep_scrape import trigger_deep_scrape_batch
     from pipeline.discovery import generate_daily_seeds, trigger_l1_scan
     from pipeline.feature_engine import compute_all_pending
@@ -80,6 +82,7 @@ def run_full_pipeline(
         "Deep scrape",
         "Type classification",
         "Feature computation",
+        "Backfill creator_graph & centrality",
         "SPS prediction",
         "Model evaluation",
     ]
@@ -88,7 +91,7 @@ def run_full_pipeline(
     start_ts = _ts()
 
     print(_SEP)
-    print(f" CraftifyX Miner — Daily Pipeline (7-step)")
+    print(f" CraftifyX Miner — Daily Pipeline (8-step)")
     print(f" Date: {start_ts}")
     print(_SEP)
     print(" Tasks:")
@@ -104,6 +107,7 @@ def run_full_pipeline(
         "deep_scrape": {},
         "classified": 0,
         "features": 0,
+        "backfill": {},
         "scores": 0,
         "evaluation": {},
         "errors": [],
@@ -162,16 +166,27 @@ def run_full_pipeline(
     if st.failed:
         summary["errors"].append(("features", st.result_line))
 
-    # Step 6: SPS prediction
+    # Step 6: Backfill creator_graph & centrality
     with _StepTimer(6, total, steps[5]) as st:
+        backfill_result = run_backfill()
+        st.result_line = (
+            f"inserted {backfill_result.get('relations_inserted', 0)} graph edges, "
+            f"updated {backfill_result.get('scores_updated', 0)} scores"
+        )
+        summary["backfill"] = backfill_result
+    if st.failed:
+        summary["errors"].append(("backfill", st.result_line))
+
+    # Step 7: SPS prediction
+    with _StepTimer(7, total, steps[6]) as st:
         scores = score_all_pending()
         st.result_line = f"{scores} creators scored"
         summary["scores"] = scores
     if st.failed:
         summary["errors"].append(("scores", st.result_line))
 
-    # Step 7: Model evaluation
-    with _StepTimer(7, total, steps[6]) as st:
+    # Step 8: Model evaluation
+    with _StepTimer(8, total, steps[7]) as st:
         eval_result = evaluate_model()
         recall = eval_result.get("recall", "N/A")
         p250 = eval_result.get("precision_at_250", "N/A")
@@ -201,6 +216,9 @@ def run_full_pipeline(
     print(f" Deep scraped:        {ds_data.get('candidates', 0)}")
     print(f" Type classified:     {summary['classified']}")
     print(f" Features computed:   {summary['features']}")
+    backfill_data = summary.get("backfill", {})
+    print(f" Backfill graph:      {backfill_data.get('relations_inserted', 0)} edges")
+    print(f" Backfill scores:     {backfill_data.get('scores_updated', 0)} updated")
     print(f" Scores computed:     {summary['scores']}")
     eval_data = summary.get("evaluation", {})
     if eval_data and not eval_data.get("error"):
