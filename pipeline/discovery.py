@@ -21,18 +21,26 @@ logger = logging.getLogger(__name__)
 
 
 def generate_daily_seeds() -> list[dict]:
-    """Return a list of anchor dicts for ALL seeds, rotated by last usage."""
-    all_seeds = fetch_all(
-        """SELECT id, username FROM creators
+    """Return a list of anchor dicts for ALL seeds + BD-passed creators, rotated by last usage."""
+    rows = fetch_all(
+        """SELECT id, username, is_seed,
+                  COALESCE(
+                      (SELECT MAX(created_at) FROM discovery_batches
+                       WHERE username = ANY(anchor_seeds)), '1970-01-01'
+                  ) AS last_used
+           FROM creators
            WHERE is_seed = true
-           ORDER BY COALESCE(
-               (SELECT MAX(created_at) FROM discovery_batches
-                WHERE username = ANY(anchor_seeds)), '1970-01-01') ASC"""
+              OR (is_seed = false AND bd_status IN ('interested', 'rejected_unfit'))
+           ORDER BY last_used ASC"""
     )
 
     anchors = [
-        {"username": s["username"], "strategy": "seed_following", "seed_id": s["id"]}
-        for s in all_seeds
+        {
+            "username": r["username"],
+            "strategy": "seed_following" if r["is_seed"] else "bd_following",
+            "seed_id": r["id"],
+        }
+        for r in rows
     ]
 
     usernames = [a["username"] for a in anchors]
@@ -44,7 +52,9 @@ def generate_daily_seeds() -> list[dict]:
             (date.today(), usernames),
         )
 
-    logger.info("Generated %d anchors (all seeds)", len(anchors))
+    seed_cnt = sum(1 for a in anchors if a["strategy"] == "seed_following")
+    passed_cnt = len(anchors) - seed_cnt
+    logger.info("Generated %d anchors (%d seeds + %d passed creators)", len(anchors), seed_cnt, passed_cnt)
     return anchors
 
 
