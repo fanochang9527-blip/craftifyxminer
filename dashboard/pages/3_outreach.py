@@ -42,6 +42,7 @@ interested = fetch_all(
        FROM creators c
        LEFT JOIN creator_scores cs ON cs.creator_id = c.id
        WHERE c.bd_decision = 'interested'
+         AND c.followers > 500
        ORDER BY cs.sps_score DESC NULLS LAST"""
 )
 
