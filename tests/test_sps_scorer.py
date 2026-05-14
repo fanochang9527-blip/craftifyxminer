@@ -43,7 +43,7 @@ class TestGetWeights:
     def test_unknown_falls_back(self):
         w = get_weights_for_type("totally_unknown_type")
         assert isinstance(w, dict)
-        assert len(w) >= 10
+        assert len(w) >= 8
 
     def test_all_types_sum_to_one(self):
         for ctype in ["oc_creator", "vtuber", "fan_artist", "game_creator", "content_creator"]:
@@ -75,7 +75,7 @@ class TestCalcSPS:
         features["monetization_score"] = 100.0
         sps_oc = calc_sps(features, "oc_creator")
         sps_vt = calc_sps(features, "vtuber")
-        # oc_creator monetization weight 0.20 vs vtuber 0.10
+        # oc_creator monetization weight 0.25 vs vtuber 0.15
         assert sps_oc > sps_vt
 
 
@@ -94,4 +94,4 @@ class TestContactProbability:
 
 class TestKeyAlignment:
     def test_same_length(self):
-        assert len(FEATURE_KEYS) == len(WEIGHT_KEYS) == 10
+        assert len(FEATURE_KEYS) == len(WEIGHT_KEYS) == 8

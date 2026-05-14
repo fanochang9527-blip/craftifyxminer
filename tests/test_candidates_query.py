@@ -162,6 +162,17 @@ class TestBuildWhereClauses:
         assert 40 in params and 90 in params
         assert 100.0 in params and 800.0 in params
 
+    def test_followers_min_threshold(self):
+        sql, params = build_where_clauses(
+            centrality=[],
+            creator_types=[],
+            strategy=[],
+            bd_status="all",
+            sps_min=0,
+            sps_max=100,
+        )
+        assert "c.followers > 500" in sql
+
 
 # ---------------------------------------------------------------------------
 # Tests — calc_pagination
