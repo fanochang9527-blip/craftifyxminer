@@ -193,7 +193,7 @@ create_admin() {
     docker compose -f "$PROJECT_DIR/docker-compose.prod.yml" run --rm \
         server python -m auth.manage create-admin \
         --username "${ADMIN_USER:-admin}" \
-        --password "${ADMIN_PASS:-Admin1234}"
+        --password "${ADMIN_PASS:-Admin123}"
 
     log "Admin user created"
 }

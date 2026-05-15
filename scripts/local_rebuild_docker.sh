@@ -22,7 +22,7 @@ fi
 PGU="${POSTGRES_USER:-miner}"
 PGD="${POSTGRES_DB:-craftifyx_miner}"
 ADMIN_USER="${ADMIN_USER:-admin}"
-ADMIN_PASS="${ADMIN_PASS:-Admin1234ab}"
+ADMIN_PASS="${ADMIN_PASS:-Admin123}"
 
 if ! docker info &>/dev/null; then
   echo "错误：无法连接 Docker。请先启动 Docker Desktop，再重试。"
@@ -33,7 +33,7 @@ if [[ "${CONFIRM:-}" != "yes" ]]; then
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo "即将执行：docker compose down -v（删除本地 Postgres 卷，库内数据全部清空）"
   echo "然后：重建容器、应用 004、创建管理员、从 xlsx 导入种子（--skip-post-pipeline）"
-  echo "管理员默认：$ADMIN_USER / （环境变量 ADMIN_PASS，默认 Admin1234ab）"
+  echo "管理员默认：$ADMIN_USER / （环境变量 ADMIN_PASS，默认 Admin123）"
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   read -r -p "确认继续请输入大写 YES: " _ack
   if [[ "${_ack}" != "YES" ]]; then
