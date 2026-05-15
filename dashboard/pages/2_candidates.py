@@ -333,6 +333,8 @@ def _render_candidates_table() -> None:
         row_cols[6].caption(source)
         row_cols[7].caption(disc_str)
 
+        current_decision = c.get("bd_decision")
+
         with row_cols[8]:
             act_cols = st.columns([1.1, 1, 1, 1])
             with act_cols[0]:
@@ -345,32 +347,50 @@ def _render_candidates_table() -> None:
                     st.session_state.candidates_detail_open_id = None if _open else cid
                     st.rerun()
             with act_cols[1]:
-                if st.button("✅", key=f"int_{cid}", help=t("candidates.btn_interested")):
-                    with get_cursor() as cur:
-                        cur.execute(
-                            "UPDATE creators SET bd_decision = 'interested', bd_status = 'interested', last_bd_update = NOW() WHERE id = %s",
-                            (cid,),
-                        )
-                    st.toast(t("candidates.marked_interested"))
-                    st.rerun()
+                if current_decision == "interested":
+                    st.markdown(
+                        "<div style='background:#28a745;color:white;padding:4px 8px;border-radius:4px;font-size:14px;text-align:center;font-weight:600;'>✅</div>",
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    if st.button("✅", key=f"int_{cid}", help=t("candidates.btn_interested")):
+                        with get_cursor() as cur:
+                            cur.execute(
+                                "UPDATE creators SET bd_decision = 'interested', bd_status = 'interested', last_bd_update = NOW() WHERE id = %s",
+                                (cid,),
+                            )
+                        st.toast(t("candidates.marked_interested"))
+                        st.rerun()
             with act_cols[2]:
-                if st.button("🚫", key=f"unfit_{cid}", help=t("candidates.btn_rejected_unfit")):
-                    with get_cursor() as cur:
-                        cur.execute(
-                            "UPDATE creators SET bd_decision = 'rejected_unfit', bd_status = 'rejected_unfit', last_bd_update = NOW() WHERE id = %s",
-                            (cid,),
-                        )
-                    st.toast(t("candidates.marked_rejected_unfit"))
-                    st.rerun()
+                if current_decision == "rejected_unfit":
+                    st.markdown(
+                        "<div style='background:#dc3545;color:white;padding:4px 8px;border-radius:4px;font-size:14px;text-align:center;font-weight:600;'>🚫</div>",
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    if st.button("🚫", key=f"unfit_{cid}", help=t("candidates.btn_rejected_unfit")):
+                        with get_cursor() as cur:
+                            cur.execute(
+                                "UPDATE creators SET bd_decision = 'rejected_unfit', bd_status = 'rejected_unfit', last_bd_update = NOW() WHERE id = %s",
+                                (cid,),
+                            )
+                        st.toast(t("candidates.marked_rejected_unfit"))
+                        st.rerun()
             with act_cols[3]:
-                if st.button("❌", key=f"notcr_{cid}", help=t("candidates.btn_rejected_not_creator")):
-                    with get_cursor() as cur:
-                        cur.execute(
-                            "UPDATE creators SET bd_decision = 'rejected_not_creator', bd_status = 'rejected_not_creator', last_bd_update = NOW() WHERE id = %s",
-                            (cid,),
-                        )
-                    st.toast(t("candidates.marked_rejected_not_creator"))
-                    st.rerun()
+                if current_decision == "rejected_not_creator":
+                    st.markdown(
+                        "<div style='background:#6c757d;color:white;padding:4px 8px;border-radius:4px;font-size:14px;text-align:center;font-weight:600;'>❌</div>",
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    if st.button("❌", key=f"notcr_{cid}", help=t("candidates.btn_rejected_not_creator")):
+                        with get_cursor() as cur:
+                            cur.execute(
+                                "UPDATE creators SET bd_decision = 'rejected_not_creator', bd_status = 'rejected_not_creator', last_bd_update = NOW() WHERE id = %s",
+                                (cid,),
+                            )
+                        st.toast(t("candidates.marked_rejected_not_creator"))
+                        st.rerun()
 
         if st.session_state.get("candidates_detail_open_id") == cid:
             ctype = c.get("creator_type") or ""
