@@ -105,96 +105,6 @@ with st.sidebar:
         index=1,
     )
 
-# ---------------------------------------------------------------------------
-# Build query
-# ---------------------------------------------------------------------------
-
-where_sql, params = build_where_clauses(
-    centrality=centrality_filter,
-    creator_types=creator_types,
-    strategy=strategy_filter,
-    bd_status=bd_status_filter,
-    sps_min=sps_min,
-    sps_max=sps_max,
-    sellability_min=sellability_min,
-    sellability_max=sellability_max,
-    pred_sales_min=pred_sales_min,
-    pred_sales_max=pred_sales_max,
-    only_sellable=only_sellable,
-)
-
-count_query = f"""
-    SELECT COUNT(*) AS cnt
-    FROM creators c
-    JOIN creator_scores cs ON cs.creator_id = c.id
-    LEFT JOIN creator_features cf ON cf.creator_id = c.id
-    WHERE {where_sql}
-"""
-total_row = fetch_one(count_query, tuple(params))
-total_count = total_row["cnt"] if total_row else 0
-
-page = st.session_state.get("candidates_page", 1)
-offset, total_pages = calc_pagination(total_count, page, per_page)
-
-query = f"""
-    SELECT c.id, c.username, c.bio, c.followers, c.bd_status, c.bd_decision, c.bd_decision_note,
-           c.discovery_strategy, c.has_merch_experience, c.website,
-           c.anchor_seed, c.discovered_via, c.discovered_date,
-           c.creator_type_manual, c.creator_type_auto,
-           COALESCE(c.creator_type_manual, c.creator_type_auto, 'unknown') AS creator_type,
-           cs.sellability_score, cs.is_sellable, cs.predicted_sales,
-           cs.sps_score, cs.centrality_tier, cs.seed_connections,
-           cf.audience_score, cf.engagement_score, cf.virality_score,
-           cf.posting_score, cf.monetization_score, cf.growth_score,
-           cf.character_consistency, cf.community_score
-    FROM creators c
-    JOIN creator_scores cs ON cs.creator_id = c.id
-    LEFT JOIN creator_features cf ON cf.creator_id = c.id
-    WHERE {where_sql}
-    ORDER BY {
-        "cs.sps_score DESC"
-        if sort_mode == "legacy_sps"
-        else f"CASE WHEN COALESCE(cs.is_sellable, false) THEN COALESCE(cs.sps_score, 0) ELSE COALESCE(cs.sps_score, 0) * {NON_SELLABLE_SPS_WEIGHT} END DESC, COALESCE(cs.predicted_sales, 0) DESC, cs.sps_score DESC"
-    }
-    LIMIT %s OFFSET %s
-"""
-candidates = fetch_all(query, tuple(params) + (per_page, offset))
-
-# ---------------------------------------------------------------------------
-# Title + summary badges
-# ---------------------------------------------------------------------------
-
-st.title(t("candidates.title"))
-
-hub_count = sum(1 for c in candidates if c.get("centrality_tier") == "Hub")
-conn_count = sum(1 for c in candidates if c.get("centrality_tier") == "Connector")
-high_sps_count = sum(1 for c in candidates if (c.get("sps_score") or 0) >= 75)
-high_sellability_count = sum(1 for c in candidates if (c.get("sellability_score") or 0) >= 60)
-high_pred_sales_count = sum(1 for c in candidates if (c.get("predicted_sales") or 0) >= 500)
-
-badge_cols = st.columns([2, 2, 2, 2, 2, 6])
-with badge_cols[0]:
-    st.metric(label=t("options.centrality.Hub"), value=hub_count)
-with badge_cols[1]:
-    st.metric(label=t("options.centrality.Connector"), value=conn_count)
-with badge_cols[2]:
-    st.metric(label=t("candidates.badge_high_sps"), value=high_sps_count)
-with badge_cols[3]:
-    st.metric(label=t("candidates.badge_high_sellability"), value=high_sellability_count)
-with badge_cols[4]:
-    st.metric(label=t("candidates.badge_high_pred_sales"), value=high_pred_sales_count)
-with badge_cols[5]:
-    st.markdown(f"**{t('candidates.match_count', count=total_count)}**")
-
-# ---------------------------------------------------------------------------
-# Pagination controls (top)
-# ---------------------------------------------------------------------------
-
-_render_pagination_controls(
-    page=page, total_pages=total_pages, total_count=total_count, key_prefix="top"
-)
-
-st.markdown("---")
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -210,12 +120,6 @@ _FEATURE_KEYS = [
     "audience_score", "engagement_score", "virality_score",
     "posting_score", "monetization_score", "growth_score",
     "character_consistency", "community_score",
-]
-
-_RADAR_LABELS = [
-    t("radar.audience"), t("radar.engagement"), t("radar.virality"),
-    t("radar.posting"), t("radar.monetization"), t("radar.growth"),
-    t("radar.character_consistency"), t("radar.community"),
 ]
 
 
@@ -283,147 +187,260 @@ def _build_source(c: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Responsive row layout + per-row action buttons
+# Fragment: candidates table (query + render)
 # ---------------------------------------------------------------------------
 
-header_cols = st.columns([2.1, 1.0, 0.9, 1.0, 0.7, 2.9, 1.0, 0.8, 2.6])
-header_cols[0].markdown(f"**{t('candidates.col_creator')}**")
-header_cols[1].markdown(f"**{t('candidates.centrality')}**")
-header_cols[2].markdown(f"**{t('candidates.col_sellability')}**")
-header_cols[3].markdown(f"**{t('candidates.col_pred_sales')}**")
-header_cols[4].markdown("**SPS**")
-header_cols[5].markdown(f"**{t('candidates.col_signals')}**")
-header_cols[6].markdown(f"**{t('candidates.col_source')}**")
-header_cols[7].markdown(f"**{t('candidates.col_discovered')}**")
-header_cols[8].markdown(f"**{t('candidates.col_actions')}**")
-st.markdown("---")
+@st.fragment
+def _render_candidates_table() -> None:
+    """Render the full candidates table inside a fragment so that button clicks
+    trigger only a local rerun instead of reloading the entire page."""
 
-if "candidates_detail_open_id" not in st.session_state:
-    st.session_state.candidates_detail_open_id = None
+    where_sql, params = build_where_clauses(
+        centrality=centrality_filter,
+        creator_types=creator_types,
+        strategy=strategy_filter,
+        bd_status=bd_status_filter,
+        sps_min=sps_min,
+        sps_max=sps_max,
+        sellability_min=sellability_min,
+        sellability_max=sellability_max,
+        pred_sales_min=pred_sales_min,
+        pred_sales_max=pred_sales_max,
+        only_sellable=only_sellable,
+    )
 
-for c in candidates:
-    cid = c["id"]
-    tier = c.get("centrality_tier") or "Peripheral"
-    emoji, _ = _TIER_STYLE.get(tier, ("⚪", "#95a5a6"))
-    sps = float(c.get("sps_score") or 0)
-    sellability = float(c.get("sellability_score") or 0)
-    pred_sales = float(c.get("predicted_sales") or 0)
-    signals = _build_signals(c)
-    source = _build_source(c)
-    disc_date = c.get("discovered_date")
-    disc_str = disc_date.strftime("%m-%d") if disc_date else "—"
+    count_query = f"""
+        SELECT COUNT(*) AS cnt
+        FROM creators c
+        JOIN creator_scores cs ON cs.creator_id = c.id
+        LEFT JOIN creator_features cf ON cf.creator_id = c.id
+        WHERE {where_sql}
+    """
+    total_row = fetch_one(count_query, tuple(params))
+    total_count = total_row["cnt"] if total_row else 0
 
-    row_cols = st.columns([2.1, 1.0, 0.9, 1.0, 0.7, 2.9, 1.0, 0.8, 2.6])
-    row_cols[0].markdown(f"[@{c['username']}](https://x.com/{c['username']})")
-    row_cols[1].markdown(f"{emoji} {t(f'options.centrality.{tier}')}")
-    row_cols[2].markdown(f"**{sellability:.1f}**")
-    row_cols[3].markdown(f"**{pred_sales:.0f}**")
-    row_cols[4].markdown(f"**{sps:.1f}**")
-    row_cols[5].markdown(signals)
-    row_cols[6].caption(source)
-    row_cols[7].caption(disc_str)
+    page = st.session_state.get("candidates_page", 1)
+    offset, total_pages = calc_pagination(total_count, page, per_page)
 
-    with row_cols[8]:
-        act_cols = st.columns([1.1, 1, 1, 1])
-        with act_cols[0]:
-            _open = st.session_state.get("candidates_detail_open_id") == cid
-            if st.button(
-                t("candidates.detail_toggle"),
-                key=f"detail_toggle_{cid}",
-                help=t("candidates.detail_radar"),
-            ):
-                st.session_state.candidates_detail_open_id = None if _open else cid
-                st.rerun()
-        with act_cols[1]:
-            if st.button("✅", key=f"int_{cid}", help=t("candidates.btn_interested")):
-                with get_cursor() as cur:
-                    cur.execute(
-                        "UPDATE creators SET bd_decision = 'interested', bd_status = 'interested', last_bd_update = NOW() WHERE id = %s",
-                        (cid,),
-                    )
-                st.toast(t("candidates.marked_interested"))
-                st.rerun()
-        with act_cols[2]:
-            if st.button("🚫", key=f"unfit_{cid}", help=t("candidates.btn_rejected_unfit")):
-                with get_cursor() as cur:
-                    cur.execute(
-                        "UPDATE creators SET bd_decision = 'rejected_unfit', bd_status = 'rejected_unfit', last_bd_update = NOW() WHERE id = %s",
-                        (cid,),
-                    )
-                st.toast(t("candidates.marked_rejected_unfit"))
-                st.rerun()
-        with act_cols[3]:
-            if st.button("❌", key=f"notcr_{cid}", help=t("candidates.btn_rejected_not_creator")):
-                with get_cursor() as cur:
-                    cur.execute(
-                        "UPDATE creators SET bd_decision = 'rejected_not_creator', bd_status = 'rejected_not_creator', last_bd_update = NOW() WHERE id = %s",
-                        (cid,),
-                    )
-                st.toast(t("candidates.marked_rejected_not_creator"))
-                st.rerun()
+    query = f"""
+        SELECT c.id, c.username, c.bio, c.followers, c.bd_status, c.bd_decision, c.bd_decision_note,
+               c.discovery_strategy, c.has_merch_experience, c.website,
+               c.anchor_seed, c.discovered_via, c.discovered_date,
+               c.creator_type_manual, c.creator_type_auto,
+               COALESCE(c.creator_type_manual, c.creator_type_auto, 'unknown') AS creator_type,
+               cs.sellability_score, cs.is_sellable, cs.predicted_sales,
+               cs.sps_score, cs.centrality_tier, cs.seed_connections,
+               cf.audience_score, cf.engagement_score, cf.virality_score,
+               cf.posting_score, cf.monetization_score, cf.growth_score,
+               cf.character_consistency, cf.community_score
+        FROM creators c
+        JOIN creator_scores cs ON cs.creator_id = c.id
+        LEFT JOIN creator_features cf ON cf.creator_id = c.id
+        WHERE {where_sql}
+        ORDER BY {
+            "cs.sps_score DESC"
+            if sort_mode == "legacy_sps"
+            else f"CASE WHEN COALESCE(cs.is_sellable, false) THEN COALESCE(cs.sps_score, 0) ELSE COALESCE(cs.sps_score, 0) * {NON_SELLABLE_SPS_WEIGHT} END DESC, COALESCE(cs.predicted_sales, 0) DESC, cs.sps_score DESC"
+        }
+        LIMIT %s OFFSET %s
+    """
+    candidates = fetch_all(query, tuple(params) + (per_page, offset))
 
-    if st.session_state.get("candidates_detail_open_id") == cid:
-        ctype = c.get("creator_type") or ""
-        ctype_display = t(f"options.creator_type.{ctype}") if ctype else "N/A"
-        followers_val = c.get("followers", 0) or 0
-        seeds_val = c.get("seed_connections", 0) or 0
-        with st.container(border=True):
-            st.caption(t("candidates.detail_radar"))
-            # 上：基础信息
-            if c.get("bio"):
-                st.text(c["bio"][:500])
-            else:
-                st.caption("—")
-            st.markdown(
-                f"**{t('candidates.type_label')}**: {ctype_display} · "
-                f"**{t('candidates.followers_label')}**: {followers_val:,} · "
-                f"**{t('candidates.seed_connections_label')}**: {seeds_val}"
-            )
-            ncols = st.columns([4, 1])
-            with ncols[0]:
-                note = st.text_input(
-                    t("candidates.note_placeholder"),
-                    key=f"note_{cid}",
-                    placeholder=t("candidates.note_placeholder"),
-                    value=c.get("bd_decision_note") or "",
-                )
-            with ncols[1]:
-                if st.button(t("candidates.save_note"), key=f"note_save_{cid}"):
-                    with get_cursor() as cur:
-                        cur.execute("UPDATE creators SET bd_decision_note = %s WHERE id = %s", (note, cid))
-                    st.toast(t("candidates.note_saved"))
+    # -----------------------------------------------------------------------
+    # Title + summary badges
+    # -----------------------------------------------------------------------
+
+    st.title(t("candidates.title"))
+
+    hub_count = sum(1 for c in candidates if c.get("centrality_tier") == "Hub")
+    conn_count = sum(1 for c in candidates if c.get("centrality_tier") == "Connector")
+    high_sps_count = sum(1 for c in candidates if (c.get("sps_score") or 0) >= 75)
+    high_sellability_count = sum(1 for c in candidates if (c.get("sellability_score") or 0) >= 60)
+    high_pred_sales_count = sum(1 for c in candidates if (c.get("predicted_sales") or 0) >= 500)
+
+    badge_cols = st.columns([2, 2, 2, 2, 2, 6])
+    with badge_cols[0]:
+        st.metric(label=t("options.centrality.Hub"), value=hub_count)
+    with badge_cols[1]:
+        st.metric(label=t("options.centrality.Connector"), value=conn_count)
+    with badge_cols[2]:
+        st.metric(label=t("candidates.badge_high_sps"), value=high_sps_count)
+    with badge_cols[3]:
+        st.metric(label=t("candidates.badge_high_sellability"), value=high_sellability_count)
+    with badge_cols[4]:
+        st.metric(label=t("candidates.badge_high_pred_sales"), value=high_pred_sales_count)
+    with badge_cols[5]:
+        st.markdown(f"**{t('candidates.match_count', count=total_count)}**")
+
+    # -----------------------------------------------------------------------
+    # Pagination controls (top)
+    # -----------------------------------------------------------------------
+
+    _render_pagination_controls(
+        page=page, total_pages=total_pages, total_count=total_count, key_prefix="top"
+    )
+
+    st.markdown("---")
+
+    # -----------------------------------------------------------------------
+    # Table header
+    # -----------------------------------------------------------------------
+
+    header_cols = st.columns([2.1, 1.0, 0.9, 1.0, 0.7, 2.9, 1.0, 0.8, 2.6])
+    header_cols[0].markdown(f"**{t('candidates.col_creator')}**")
+    header_cols[1].markdown(f"**{t('candidates.centrality')}**")
+    header_cols[2].markdown(f"**{t('candidates.col_sellability')}**")
+    header_cols[3].markdown(f"**{t('candidates.col_pred_sales')}**")
+    header_cols[4].markdown("**SPS**")
+    header_cols[5].markdown(f"**{t('candidates.col_signals')}**")
+    header_cols[6].markdown(f"**{t('candidates.col_source')}**")
+    header_cols[7].markdown(f"**{t('candidates.col_discovered')}**")
+    header_cols[8].markdown(f"**{t('candidates.col_actions')}**")
+    st.markdown("---")
+
+    if "candidates_detail_open_id" not in st.session_state:
+        st.session_state.candidates_detail_open_id = None
+
+    _RADAR_LABELS = [
+        t("radar.audience"), t("radar.engagement"), t("radar.virality"),
+        t("radar.posting"), t("radar.monetization"), t("radar.growth"),
+        t("radar.character_consistency"), t("radar.community"),
+    ]
+
+    # -----------------------------------------------------------------------
+    # Rows
+    # -----------------------------------------------------------------------
+
+    for c in candidates:
+        cid = c["id"]
+        tier = c.get("centrality_tier") or "Peripheral"
+        emoji, _ = _TIER_STYLE.get(tier, ("⚪", "#95a5a6"))
+        sps = float(c.get("sps_score") or 0)
+        sellability = float(c.get("sellability_score") or 0)
+        pred_sales = float(c.get("predicted_sales") or 0)
+        signals = _build_signals(c)
+        source = _build_source(c)
+        disc_date = c.get("discovered_date")
+        disc_str = disc_date.strftime("%m-%d") if disc_date else "—"
+
+        row_cols = st.columns([2.1, 1.0, 0.9, 1.0, 0.7, 2.9, 1.0, 0.8, 2.6])
+        row_cols[0].markdown(f"[@{c['username']}](https://x.com/{c['username']})")
+        row_cols[1].markdown(f"{emoji} {t(f'options.centrality.{tier}')}")
+        row_cols[2].markdown(f"**{sellability:.1f}**")
+        row_cols[3].markdown(f"**{pred_sales:.0f}**")
+        row_cols[4].markdown(f"**{sps:.1f}**")
+        row_cols[5].markdown(signals)
+        row_cols[6].caption(source)
+        row_cols[7].caption(disc_str)
+
+        with row_cols[8]:
+            act_cols = st.columns([1.1, 1, 1, 1])
+            with act_cols[0]:
+                _open = st.session_state.get("candidates_detail_open_id") == cid
+                if st.button(
+                    t("candidates.detail_toggle"),
+                    key=f"detail_toggle_{cid}",
+                    help=t("candidates.detail_radar"),
+                ):
+                    st.session_state.candidates_detail_open_id = None if _open else cid
                     st.rerun()
-            current_type = c.get("creator_type_manual") or c.get("creator_type_auto") or "unknown"
-            type_opts = CREATOR_TYPE_OPTS
-            type_idx = type_opts.index(current_type) if current_type in type_opts else len(type_opts) - 1
-            new_type = st.selectbox(
-                t("candidates.type_label"),
-                type_opts,
-                index=type_idx,
-                key=f"type_{cid}",
-                format_func=_opt("creator_type"),
-            )
-            if st.button(t("candidates.apply_type"), key=f"type_apply_{cid}"):
-                with get_cursor() as cur:
-                    cur.execute(
-                        "UPDATE creators SET creator_type_manual = %s WHERE id = %s",
-                        (new_type, cid),
+            with act_cols[1]:
+                if st.button("✅", key=f"int_{cid}", help=t("candidates.btn_interested")):
+                    with get_cursor() as cur:
+                        cur.execute(
+                            "UPDATE creators SET bd_decision = 'interested', bd_status = 'interested', last_bd_update = NOW() WHERE id = %s",
+                            (cid,),
+                        )
+                    st.toast(t("candidates.marked_interested"))
+                    st.rerun()
+            with act_cols[2]:
+                if st.button("🚫", key=f"unfit_{cid}", help=t("candidates.btn_rejected_unfit")):
+                    with get_cursor() as cur:
+                        cur.execute(
+                            "UPDATE creators SET bd_decision = 'rejected_unfit', bd_status = 'rejected_unfit', last_bd_update = NOW() WHERE id = %s",
+                            (cid,),
+                        )
+                    st.toast(t("candidates.marked_rejected_unfit"))
+                    st.rerun()
+            with act_cols[3]:
+                if st.button("❌", key=f"notcr_{cid}", help=t("candidates.btn_rejected_not_creator")):
+                    with get_cursor() as cur:
+                        cur.execute(
+                            "UPDATE creators SET bd_decision = 'rejected_not_creator', bd_status = 'rejected_not_creator', last_bd_update = NOW() WHERE id = %s",
+                            (cid,),
+                        )
+                    st.toast(t("candidates.marked_rejected_not_creator"))
+                    st.rerun()
+
+        if st.session_state.get("candidates_detail_open_id") == cid:
+            ctype = c.get("creator_type") or ""
+            ctype_display = t(f"options.creator_type.{ctype}") if ctype else "N/A"
+            followers_val = c.get("followers", 0) or 0
+            seeds_val = c.get("seed_connections", 0) or 0
+            with st.container(border=True):
+                st.caption(t("candidates.detail_radar"))
+                # 上：基础信息
+                if c.get("bio"):
+                    st.text(c["bio"][:500])
+                else:
+                    st.caption("—")
+                st.markdown(
+                    f"**{t('candidates.type_label')}**: {ctype_display} · "
+                    f"**{t('candidates.followers_label')}**: {followers_val:,} · "
+                    f"**{t('candidates.seed_connections_label')}**: {seeds_val}"
+                )
+                ncols = st.columns([4, 1])
+                with ncols[0]:
+                    note = st.text_input(
+                        t("candidates.note_placeholder"),
+                        key=f"note_{cid}",
+                        placeholder=t("candidates.note_placeholder"),
+                        value=c.get("bd_decision_note") or "",
                     )
-                st.toast(t("candidates.type_updated"))
-                st.rerun()
-            # 下：雷达图（整行宽度）
-            st.markdown("---")
-            features = {k: c.get(k, 0) for k in _FEATURE_KEYS}
-            fig = create_radar_chart(features, f"@{c['username']}", labels=_RADAR_LABELS)
-            st.plotly_chart(fig, use_container_width=True, key=f"radar_{cid}")
+                with ncols[1]:
+                    if st.button(t("candidates.save_note"), key=f"note_save_{cid}"):
+                        with get_cursor() as cur:
+                            cur.execute("UPDATE creators SET bd_decision_note = %s WHERE id = %s", (note, cid))
+                        st.toast(t("candidates.note_saved"))
+                        st.rerun()
+                current_type = c.get("creator_type_manual") or c.get("creator_type_auto") or "unknown"
+                type_opts = CREATOR_TYPE_OPTS
+                type_idx = type_opts.index(current_type) if current_type in type_opts else len(type_opts) - 1
+                new_type = st.selectbox(
+                    t("candidates.type_label"),
+                    type_opts,
+                    index=type_idx,
+                    key=f"type_{cid}",
+                    format_func=_opt("creator_type"),
+                )
+                if st.button(t("candidates.apply_type"), key=f"type_apply_{cid}"):
+                    with get_cursor() as cur:
+                        cur.execute(
+                            "UPDATE creators SET creator_type_manual = %s WHERE id = %s",
+                            (new_type, cid),
+                        )
+                    st.toast(t("candidates.type_updated"))
+                    st.rerun()
+                # 下：雷达图（整行宽度）
+                st.markdown("---")
+                features = {k: c.get(k, 0) for k in _FEATURE_KEYS}
+                fig = create_radar_chart(features, f"@{c['username']}", labels=_RADAR_LABELS)
+                st.plotly_chart(fig, use_container_width=True, key=f"radar_{cid}")
 
-    st.markdown("<hr style='margin:2px 0;border-color:#333'>", unsafe_allow_html=True)
+        st.markdown("<hr style='margin:2px 0;border-color:#333'>", unsafe_allow_html=True)
+
+    # -----------------------------------------------------------------------
+    # Pagination controls (bottom)
+    # -----------------------------------------------------------------------
+
+    st.markdown("---")
+    _render_pagination_controls(
+        page=page, total_pages=total_pages, total_count=total_count, key_prefix="bottom"
+    )
+
 
 # ---------------------------------------------------------------------------
-# Pagination controls (bottom)
+# Render the fragment
 # ---------------------------------------------------------------------------
 
-st.markdown("---")
-_render_pagination_controls(
-    page=page, total_pages=total_pages, total_count=total_count, key_prefix="bottom"
-)
+_render_candidates_table()
