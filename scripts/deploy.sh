@@ -209,6 +209,31 @@ start_services() {
 }
 
 # ──────────────────────────────────────────────
+# 6.5 特征工程补算（有 tweets 但无 creator_features 的创作者）
+# ──────────────────────────────────────────────
+backfill_features() {
+    log "Backfilling missing creator features..."
+    docker compose -f "$PROJECT_DIR/docker-compose.prod.yml" run --rm server \
+        python -c "from pipeline.feature_engine import backfill_missing_features; backfill_missing_features()"
+    log "Feature backfill complete"
+}
+
+# ──────────────────────────────────────────────
+# 6.6 冷启动模型训练（文件不存在时才执行）
+# ──────────────────────────────────────────────
+train_models_if_missing() {
+    local model_dir="$PROJECT_DIR/models"
+    if [[ -f "$model_dir/sps_model.joblib" && -f "$model_dir/sellability_model.joblib" ]]; then
+        log "Model files already exist, skipping cold-start training"
+        return
+    fi
+    warn "Model files missing, triggering cold-start training..."
+    docker compose -f "$PROJECT_DIR/docker-compose.prod.yml" run --rm server \
+        python -c "from pipeline.runner import train_models; train_models()"
+    log "Cold-start training complete"
+}
+
+# ──────────────────────────────────────────────
 # 7. 配置备份 Crontab
 # ──────────────────────────────────────────────
 setup_backup() {
@@ -275,6 +300,9 @@ main() {
     init_database
     create_admin
     start_services
+    docker compose -f "$PROJECT_DIR/docker-compose.prod.yml" restart nginx
+    backfill_features
+    train_models_if_missing
     setup_backup
     configure_firewall
     verify_health

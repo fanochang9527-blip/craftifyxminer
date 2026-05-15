@@ -60,11 +60,10 @@ docker compose exec -T db psql -U "$PGU" -d "$PGD" -v ON_ERROR_STOP=1 < "$PROJEC
 docker compose exec -T db psql -U "$PGU" -d "$PGD" -v ON_ERROR_STOP=1 < "$PROJECT_DIR/db/migrations/005_seed_platform_account_unique.sql"
 docker compose exec -T db psql -U "$PGU" -d "$PGD" -v ON_ERROR_STOP=1 < "$PROJECT_DIR/db/migrations/006_dual_model_scores.sql"
 
-echo "[5/5] create-admin + seed_import (xlsx, skip post-pipeline) ..."
+echo "[5/5] create-admin + seed_import (含后处理: 深度抓取 → 特征计算 → 模型训练) ..."
 docker compose run --rm server python -m auth.manage create-admin --username "$ADMIN_USER" --password "$ADMIN_PASS"
 docker compose run --rm server python -m pipeline.seed_import \
-  --xlsx "/app/data/创作者账号链接及销量收集.xlsx" \
-  --skip-post-pipeline
+  --xlsx "/app/data/创作者账号链接及销量收集.xlsx"
 
 echo "Health:"
 curl -sf "http://127.0.0.1:${FLASK_PORT:-5000}/health" && echo ""

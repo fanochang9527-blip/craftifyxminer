@@ -253,15 +253,13 @@ import_seeds() {
       log "Importing seed xlsx: $container_path"
       docker compose -f "$COMPOSE_FILE" run --rm server \
         python -m pipeline.seed_import \
-        --xlsx "$container_path" \
-        --skip-post-pipeline
+        --xlsx "$container_path"
       ;;
     csv|CSV)
       log "Importing seed csv: $container_path"
       docker compose -f "$COMPOSE_FILE" run --rm server \
         python -m pipeline.seed_import \
-        --csv "$container_path" \
-        --skip-post-pipeline
+        --csv "$container_path"
       ;;
     *)
       err "Unsupported seed file extension: .$ext (use .xlsx or .csv)"
@@ -273,6 +271,25 @@ import_seeds() {
 start_services() {
   log "Starting services with rebuild..."
   docker compose -f "$COMPOSE_FILE" up -d --build
+}
+
+backfill_features() {
+  log "Backfilling missing creator features..."
+  docker compose -f "$COMPOSE_FILE" run --rm server \
+    python -c "from pipeline.feature_engine import backfill_missing_features; backfill_missing_features()"
+  log "Feature backfill complete"
+}
+
+train_models_if_missing() {
+  local model_dir="$PROJECT_DIR/models"
+  if [[ -f "$model_dir/sps_model.joblib" && -f "$model_dir/sellability_model.joblib" ]]; then
+    log "Model files already exist, skipping cold-start training"
+    return
+  fi
+  warn "Model files missing, triggering cold-start training..."
+  docker compose -f "$COMPOSE_FILE" run --rm server \
+    python -c "from pipeline.runner import train_models; train_models()"
+  log "Cold-start training complete"
 }
 
 health_check() {
@@ -317,6 +334,9 @@ main() {
     echo "============================================"
     git_sync
     start_services
+    docker compose -f "$COMPOSE_FILE" restart nginx
+    backfill_features
+    train_models_if_missing
     health_check
     echo ""
     log "All done."
@@ -354,6 +374,7 @@ main() {
   create_admin
   import_seeds
   start_services
+  docker compose -f "$COMPOSE_FILE" restart nginx
   health_check
 
   echo ""

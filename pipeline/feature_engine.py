@@ -270,6 +270,14 @@ def compute_features_for_creator(creator_id: int) -> dict | None:
     return {"creator_id": creator_id, **features}
 
 
+def backfill_missing_features() -> int:
+    """Backfill creator_features for all creators that have tweets but no features yet.
+
+    This is a standalone entry point for cron jobs and deployment scripts.
+    """
+    return compute_all_pending()
+
+
 def compute_all_pending() -> int:
     """Compute features for all deep-scraped creators without features yet."""
     rows = fetch_all(

@@ -85,6 +85,8 @@ def run_full_pipeline(
         "Backfill creator_graph & centrality",
         "SPS prediction",
         "Model evaluation",
+        "Train sellability model",
+        "Train SPS model",
     ]
     total = len(steps)
     start_time = time.time()
@@ -110,6 +112,8 @@ def run_full_pipeline(
         "backfill": {},
         "scores": 0,
         "evaluation": {},
+        "sellability_training": {},
+        "sps_training": {},
         "errors": [],
     }
 
@@ -195,6 +199,24 @@ def run_full_pipeline(
     if st.failed:
         summary["errors"].append(("evaluation", st.result_line))
 
+    # Step 9: Train sellability model
+    with _StepTimer(9, total, steps[8]) as st:
+        from pipeline.sellability_model import train_model as _train_sellability
+        train_meta = _train_sellability()
+        st.result_line = f"{train_meta['model_type']} ({train_meta['n_samples']} samples)"
+        summary["sellability_training"] = train_meta
+    if st.failed:
+        summary["errors"].append(("sellability_training", st.result_line))
+
+    # Step 10: Train SPS model
+    with _StepTimer(10, total, steps[9]) as st:
+        from pipeline.sps_model import train_model as _train_sps
+        train_meta = _train_sps()
+        st.result_line = f"{train_meta['model_type']} ({train_meta['n_samples']} samples)"
+        summary["sps_training"] = train_meta
+    if st.failed:
+        summary["errors"].append(("sps_training", st.result_line))
+
     # Summary
     total_elapsed = time.time() - start_time
     status = "SUCCESS" if not summary["errors"] else "PARTIAL FAILURE"
@@ -225,6 +247,12 @@ def run_full_pipeline(
         print(f" Model eval:          recall={eval_data.get('recall')}, "
               f"P@250={eval_data.get('precision_at_250')}, "
               f"F2={eval_data.get('f2_score')}")
+    sell_train = summary.get("sellability_training", {})
+    if sell_train and not sell_train.get("error"):
+        print(f" Sellability training: {sell_train.get('model_type')} ({sell_train.get('n_samples')} samples)")
+    sps_train = summary.get("sps_training", {})
+    if sps_train and not sps_train.get("error"):
+        print(f" SPS training:         {sps_train.get('model_type')} ({sps_train.get('n_samples')} samples)")
     print(f" Total elapsed:       {total_elapsed:.1f}s")
     print(f" Status:              {status}")
     if summary["errors"]:
@@ -235,6 +263,33 @@ def run_full_pipeline(
 
     logger.info("Pipeline complete: %s in %.1fs", status, total_elapsed)
     return summary
+
+
+def train_models() -> dict:
+    """Train both ML models (sellability + SPS). Used by deployment scripts for cold-start.
+
+    Returns a dict with training metadata for each model. Errors are caught and logged
+    so that a failure in one model does not block the other.
+    """
+    from pipeline.sellability_model import train_model as _train_sellability
+    from pipeline.sps_model import train_model as _train_sps
+
+    results: dict = {}
+    try:
+        results["sellability"] = _train_sellability()
+        logger.info("Sellability model trained: %s", results["sellability"]["model_type"])
+    except Exception:
+        logger.exception("Sellability model training failed")
+        results["sellability"] = {"error": "training_failed"}
+
+    try:
+        results["sps"] = _train_sps()
+        logger.info("SPS model trained: %s", results["sps"]["model_type"])
+    except Exception:
+        logger.exception("SPS model training failed")
+        results["sps"] = {"error": "training_failed"}
+
+    return results
 
 
 if __name__ == "__main__":
