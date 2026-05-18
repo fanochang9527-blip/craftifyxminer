@@ -40,6 +40,15 @@ def job_backfill_graph():
     )
 
 
+@scheduler.scheduled_job("cron", hour=10, minute=0, id="backfill_features")
+def job_backfill_features():
+    """Backfill creator_features for any creators with tweets but missing features."""
+    logger.info("=== Job: backfill_features ===")
+    from pipeline.feature_engine import backfill_missing_features
+    count = backfill_missing_features()
+    logger.info("Backfilled features for %d creators", count)
+
+
 @scheduler.scheduled_job("cron", hour=23, minute=0, id="daily_summary")
 def job_daily_summary():
     """Generate daily summary and ensure cost row exists."""
