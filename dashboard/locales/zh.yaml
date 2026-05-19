@@ -91,6 +91,7 @@ candidates:
   sps_pending: "SPS 待计算"
   per_page: "每页条数"
   page_info: "第 {page}/{total_pages} 页，共 {total} 条"
+  jump: "跳转"
 
 outreach:
   title: "📞 联系追踪与销售反馈"

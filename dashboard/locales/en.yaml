@@ -91,6 +91,7 @@ candidates:
   sps_pending: "SPS pending"
   per_page: "Per page"
   page_info: "Page {page}/{total_pages}, {total} total"
+  jump: "Go"
 
 outreach:
   title: "📞 Contact Tracking & Sales Feedback"

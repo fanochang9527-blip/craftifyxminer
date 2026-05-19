@@ -29,7 +29,7 @@ from dashboard.candidates_query import (
 def _render_pagination_controls(
     *, page: int, total_pages: int, total_count: int, key_prefix: str
 ) -> None:
-    pag_cols = st.columns([3, 2, 2, 3])
+    pag_cols = st.columns([2, 2, 1.5, 1.5, 2, 1])
     with pag_cols[0]:
         st.caption(t("candidates.page_info", page=page, total_pages=total_pages, total=total_count))
     with pag_cols[1]:
@@ -38,6 +38,21 @@ def _render_pagination_controls(
             st.session_state["candidates_detail_open_id"] = None
             st.rerun()
     with pag_cols[2]:
+        jump_page = st.number_input(
+            t("candidates.jump"),
+            min_value=1,
+            max_value=total_pages,
+            value=page,
+            key=f"jump_input_{key_prefix}",
+            label_visibility="collapsed",
+        )
+    with pag_cols[3]:
+        if st.button(t("candidates.jump"), key=f"jump_btn_{key_prefix}"):
+            if jump_page != page:
+                st.session_state["candidates_page"] = int(jump_page)
+                st.session_state["candidates_detail_open_id"] = None
+                st.rerun()
+    with pag_cols[4]:
         if st.button("➡️", disabled=(page >= total_pages), key=f"next_{key_prefix}"):
             st.session_state["candidates_page"] = page + 1
             st.session_state["candidates_detail_open_id"] = None
