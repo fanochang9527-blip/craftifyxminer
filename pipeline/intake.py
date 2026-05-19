@@ -171,8 +171,18 @@ def run_filter_pipeline(usernames: set[str] | None = None) -> dict:
 
         for r in ai_results:
             status = "ai_passed" if r.get("result") == "YES" else "ai_rejected"
+            ctype = r.get("type")
             with get_cursor() as cur:
-                cur.execute("UPDATE creators SET bd_status = %s WHERE id = %s", (status, r["bio_id"]))
+                if ctype:
+                    cur.execute(
+                        "UPDATE creators SET bd_status = %s, creator_type_auto = %s WHERE id = %s",
+                        (status, ctype, r["bio_id"]),
+                    )
+                else:
+                    cur.execute(
+                        "UPDATE creators SET bd_status = %s WHERE id = %s",
+                        (status, r["bio_id"]),
+                    )
             if status == "ai_passed":
                 stats["ai_passed"] += 1
             else:
