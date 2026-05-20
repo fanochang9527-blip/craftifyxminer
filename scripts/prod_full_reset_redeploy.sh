@@ -273,23 +273,84 @@ start_services() {
   docker compose -f "$COMPOSE_FILE" up -d --build
 }
 
+apply_migrations() {
+  log "Applying database migrations (incremental, safe to re-run)..."
+  local mig_dir="$PROJECT_DIR/db/migrations"
+  if [[ -d "$mig_dir" ]]; then
+    for mig in "$mig_dir"/*.sql; do
+      if [[ -f "$mig" ]]; then
+        log "  -> $(basename "$mig")"
+        if command -v psql &>/dev/null; then
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=0 -f "$mig" >/dev/null 2>&1 || true
+        else
+          docker run --rm \
+            -v "$PROJECT_DIR/db:/sql:ro" \
+            --network host \
+            postgres:18-alpine \
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=0 -f "/sql/migrations/$(basename "$mig")" >/dev/null 2>&1 || true
+        fi
+      fi
+    done
+  fi
+  log "Migrations applied"
+}
+
 backfill_features() {
   log "Backfilling missing creator features..."
+  # 1) 给有 tweets 但完全没有 features 的创作者计算全部特征
   docker compose -f "$COMPOSE_FILE" run --rm server \
     python -c "from pipeline.feature_engine import backfill_missing_features; backfill_missing_features()"
+  # 2) 给已有 features 但缺少 audience_segment_score 的存量记录补算新列
+  docker compose -f "$COMPOSE_FILE" run --rm server \
+    python -c "from pipeline.feature_engine import backfill_audience_segment_for_existing_features; backfill_audience_segment_for_existing_features()"
   log "Feature backfill complete"
 }
 
-train_models_if_missing() {
-  local model_dir="$PROJECT_DIR/models"
-  if [[ -f "$model_dir/sps_model.joblib" && -f "$model_dir/sellability_model.joblib" ]]; then
-    log "Model files already exist, skipping cold-start training"
-    return
-  fi
-  warn "Model files missing, triggering cold-start training..."
+train_models_if_needed() {
+  log "Checking model dimension compatibility..."
   docker compose -f "$COMPOSE_FILE" run --rm server \
-    python -c "from pipeline.runner import train_models; train_models()"
-  log "Cold-start training complete"
+    python -c "
+import json, sys
+from pathlib import Path
+from config.settings import MODEL_META_PATH, SELLABILITY_MODEL_META_PATH
+from pipeline.sps_model import FEATURE_COLS
+from config.settings import CREATOR_TYPES
+
+expected = len(FEATURE_COLS) + len(CREATOR_TYPES)
+needs_train = False
+
+for meta_path in [MODEL_META_PATH, SELLABILITY_MODEL_META_PATH]:
+    if not meta_path.exists():
+        needs_train = True
+        print(f'Meta missing: {meta_path}')
+        break
+    with open(meta_path) as f:
+        meta = json.load(f)
+    actual = meta.get('n_features', 0)
+    if actual != expected:
+        needs_train = True
+        print(f'Dimension mismatch: {meta_path} has {actual}, expected {expected}')
+        break
+
+if needs_train:
+    print('RETRAIN_REQUIRED')
+    sys.exit(1)
+else:
+    print('MODELS_OK')
+    sys.exit(0)
+"
+
+  if [[ $? -ne 0 ]]; then
+    warn "Model dimension mismatch or missing, triggering retraining..."
+    if docker compose -f "$COMPOSE_FILE" run --rm server \
+      python -c "from pipeline.sps_model import train_model as train_sps; from pipeline.sellability_model import train_model as train_sell; train_sps(); train_sell()"; then
+      log "Model retraining complete"
+    else
+      warn "Model retraining failed — models will be retried by daily cron or manual backfill"
+    fi
+  else
+    log "Model files are up-to-date, skipping training"
+  fi
 }
 
 health_check() {
@@ -330,13 +391,14 @@ main() {
     echo "============================================"
     echo "项目目录:     $PROJECT_DIR"
     echo "目标分支:     ${BRANCH:-<当前分支>}"
-    echo "操作说明:     更新代码 -> 重启服务（保留数据库）"
+    echo "操作说明:     更新代码 -> 执行迁移 -> 重启服务 -> 补算特征 -> 训练模型"
     echo "============================================"
     git_sync
+    apply_migrations
     start_services
     docker compose -f "$COMPOSE_FILE" restart nginx
     backfill_features
-    train_models_if_missing
+    train_models_if_needed
     health_check
     echo ""
     log "All done."
@@ -373,6 +435,8 @@ main() {
   rebuild_database
   create_admin
   import_seeds
+  backfill_features
+  train_models_if_needed
   start_services
   docker compose -f "$COMPOSE_FILE" restart nginx
   health_check

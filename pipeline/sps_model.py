@@ -31,6 +31,7 @@ FEATURE_COLS = [
     "growth_score",
     "character_consistency",
     "community_score",
+    "audience_segment_score",
 ]
 
 
@@ -91,7 +92,7 @@ def train_model() -> dict:
     feature_names = FEATURE_COLS + [f"type_{t}" for t in CREATOR_TYPES]
     meta = {
         "model_type": model_type,
-        "n_samples": n_samples,
+        "n_samples": int(n_samples),
         "n_features": len(feature_names),
         "feature_names": feature_names,
         "target": "total_sales_log1p",
