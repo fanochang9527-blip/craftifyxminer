@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS creators (
     bd_assigned_to VARCHAR(50),
     bd_decision VARCHAR(20),
     bd_decision_note TEXT,
+    creator_segment VARCHAR(20),
     last_bd_update TIMESTAMP,
     last_scraped_as_anchor TIMESTAMP,
     first_seen_at TIMESTAMP DEFAULT NOW()
@@ -61,7 +62,8 @@ CREATE TABLE IF NOT EXISTS creator_features (
     posting_score FLOAT,
     monetization_score FLOAT,
     character_consistency FLOAT,
-    community_score FLOAT
+    community_score FLOAT,
+    audience_segment_score FLOAT
 );
 
 -- 4. creator_graph (关系图谱)

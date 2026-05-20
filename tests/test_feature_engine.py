@@ -12,6 +12,7 @@ import pytest
 
 from pipeline.feature_engine import (
     calc_audience,
+    calc_audience_segment,
     calc_character_consistency,
     calc_community,
     calc_engagement,
@@ -162,6 +163,54 @@ class TestCharacterConsistency:
         ]
         score = calc_character_consistency(tweets)
         assert 40 < score < 60
+
+
+class TestAudienceSegment:
+    def test_nsfw_in_bio(self):
+        score, seg = calc_audience_segment("NSFW artist", "", "user1")
+        assert seg == "nsfw"
+        assert score == 20.0
+
+    def test_nsfw_in_username(self):
+        score, seg = calc_audience_segment("Just an artist", "", "nsfw_creator")
+        assert seg == "nsfw"
+        assert score == 20.0
+
+    def test_emoji_in_bio(self):
+        score, seg = calc_audience_segment("Adult content 🔞", "", "user2")
+        assert seg == "nsfw"
+        assert score == 20.0
+
+    def test_emoji_in_username(self):
+        score, seg = calc_audience_segment("Bio here", "", "artist🔞")
+        assert seg == "nsfw"
+        assert score == 20.0
+
+    def test_multi_platform_instagram(self):
+        score, seg = calc_audience_segment("Find me on instagram.com/art", "", "user3")
+        assert seg == "multi_platform"
+        assert score == 80.0
+
+    def test_multi_platform_website(self):
+        score, seg = calc_audience_segment("Artist", "https://booth.pm/123", "user4")
+        assert seg == "multi_platform"
+        assert score == 80.0
+
+    def test_mainstream_no_signals(self):
+        score, seg = calc_audience_segment("Just a normal bio", "", "user5")
+        assert seg == "mainstream"
+        assert score == 50.0
+
+    def test_nsfw_priority_over_multi_platform(self):
+        """NSFW 优先级应高于多平台判定。"""
+        score, seg = calc_audience_segment("NSFW 🔞 instagram.com/art", "", "user6")
+        assert seg == "nsfw"
+        assert score == 20.0
+
+    def test_empty_bio_and_username(self):
+        score, seg = calc_audience_segment("", "", "")
+        assert seg == "mainstream"
+        assert score == 50.0
 
 
 class TestCommunity:

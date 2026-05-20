@@ -10,6 +10,7 @@ oc_creator:
   growth: 0.05
   character_consistency: 0.25
   community: 0.05
+  audience_segment: 0.00
 
 vtuber:
   audience: 0.15
@@ -20,6 +21,7 @@ vtuber:
   growth: 0.10
   character_consistency: 0.10
   community: 0.05
+  audience_segment: 0.00
 
 fan_artist:
   audience: 0.10
@@ -30,6 +32,7 @@ fan_artist:
   growth: 0.05
   character_consistency: 0.10
   community: 0.15
+  audience_segment: 0.00
 
 game_creator:
   audience: 0.15
@@ -40,6 +43,7 @@ game_creator:
   growth: 0.10
   character_consistency: 0.15
   community: 0.10
+  audience_segment: 0.00
 
 content_creator:
   audience: 0.15
@@ -50,3 +54,4 @@ content_creator:
   growth: 0.10
   character_consistency: 0.10
   community: 0.10
+  audience_segment: 0.00

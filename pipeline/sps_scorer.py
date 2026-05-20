@@ -30,6 +30,7 @@ FEATURE_KEYS = [
     "growth_score",
     "character_consistency",
     "community_score",
+    "audience_segment_score",
 ]
 
 WEIGHT_KEYS = [
@@ -41,6 +42,7 @@ WEIGHT_KEYS = [
     "growth",
     "character_consistency",
     "community",
+    "audience_segment",
 ]
 
 
@@ -83,7 +85,7 @@ def calc_sps(features: dict, creator_type: str) -> float:
         score = float(features.get(fk, 0) or 0)
         weight = float(w.get(wk, 0) or 0)
         total += score * weight
-    return round(total, 2)
+    return round(min(total, 100.0), 2)
 
 
 def calc_sellability(features: dict, creator_type: str) -> float:

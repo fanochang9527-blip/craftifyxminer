@@ -180,6 +180,42 @@ def calc_character_consistency(tweets: list[dict]) -> float:
     return min(top_ratio * 100.0, 100.0)
 
 
+_MULTI_PLATFORM_DOMAINS: tuple[str, ...] = (
+    "instagram.com", "twitch.tv", "youtube.com", "pixiv.net",
+    "booth.pm", "etsy.com", "patreon.com", "fanbox.cc",
+    "skeb.jp", "artstation.com", "tiktok.com", "linkedin.com",
+    "behance.net", "discord.gg", "reddit.com", "carrd.co",
+    "ko-fi.com", "buymeacoffee.com", "linktr.ee", "lit.link",
+    "taplink.cc", "toyhou.se", "newgrounds.com", "furaffinity.net",
+)
+
+
+def calc_audience_segment(bio: str, website: str, username: str) -> tuple[float, str]:
+    """计算受众分段评分与分类标签。
+
+    Returns:
+        (score, segment): score 用于模型输入，segment 用于业务展示。
+        - multi_platform: 80.0
+        - mainstream:     50.0
+        - nsfw:           20.0
+    """
+    bio_text = bio or ""
+    username_text = username or ""
+    combined_lower = (bio_text + " " + username_text).lower()
+
+    # 优先级 1: 成人向（NSFW 或 🔞）
+    if "nsfw" in combined_lower or "🔞" in bio_text or "🔞" in username_text:
+        return 20.0, "nsfw"
+
+    # 优先级 2: 多平台（bio / website 中包含其他平台链接）
+    all_text = (bio_text + " " + (website or "")).lower()
+    if any(d in all_text for d in _MULTI_PLATFORM_DOMAINS):
+        return 80.0, "multi_platform"
+
+    # 默认: 正常销量创作者
+    return 50.0, "mainstream"
+
+
 def calc_community(tweets: list[dict], max_community: int = 100) -> float:
     """Community score with fanart retweet weighting.
 
@@ -234,6 +270,8 @@ def compute_features_for_creator(creator_id: int) -> dict | None:
     top3_avg = sum(sorted_eng[:3]) / min(len(sorted_eng), 3) if sorted_eng else 0
     monthly_avg = sum(engagement_vals) / len(engagement_vals) if engagement_vals else 0
 
+    audience_segment_score, segment = calc_audience_segment(bio, website, creator.get("username") or "")
+
     features = {
         "audience_score": calc_audience(followers, following),
         "engagement_score": calc_engagement(tweets, followers),
@@ -243,6 +281,7 @@ def compute_features_for_creator(creator_id: int) -> dict | None:
         "growth_score": calc_growth(),
         "character_consistency": calc_character_consistency(tweets),
         "community_score": calc_community(tweets),
+        "audience_segment_score": audience_segment_score,
     }
 
     with get_cursor() as cur:
@@ -250,10 +289,10 @@ def compute_features_for_creator(creator_id: int) -> dict | None:
             """INSERT INTO creator_features
                    (creator_id, audience_score, engagement_score, virality_score,
                     growth_score, posting_score, monetization_score,
-                    character_consistency, community_score)
+                    character_consistency, community_score, audience_segment_score)
                VALUES (%(cid)s, %(audience_score)s, %(engagement_score)s, %(virality_score)s,
                        %(growth_score)s, %(posting_score)s, %(monetization_score)s,
-                       %(character_consistency)s, %(community_score)s)
+                       %(character_consistency)s, %(community_score)s, %(audience_segment_score)s)
                ON CONFLICT (creator_id) DO UPDATE SET
                    audience_score = EXCLUDED.audience_score,
                    engagement_score = EXCLUDED.engagement_score,
@@ -263,11 +302,49 @@ def compute_features_for_creator(creator_id: int) -> dict | None:
                    monetization_score = EXCLUDED.monetization_score,
                    character_consistency = EXCLUDED.character_consistency,
                    community_score = EXCLUDED.community_score,
+                   audience_segment_score = EXCLUDED.audience_segment_score,
                    calculated_at = NOW()""",
             {"cid": creator_id, **features},
         )
 
+        # 同步更新 creators 表的分类标签
+        cur.execute(
+            "UPDATE creators SET creator_segment = %s WHERE id = %s AND creator_segment IS DISTINCT FROM %s",
+            (segment, creator_id, segment),
+        )
+
     return {"creator_id": creator_id, **features}
+
+
+def backfill_audience_segment_for_existing_features() -> int:
+    """为已有 creator_features 但缺少 audience_segment_score 的存量记录补算。
+
+    部署新增特征列后，存量记录不会自动获得新值；此函数幂等补算。
+    """
+    rows = fetch_all(
+        """SELECT c.id, c.username, c.bio, c.website
+           FROM creators c
+           JOIN creator_features cf ON cf.creator_id = c.id
+           WHERE cf.audience_segment_score IS NULL"""
+    )
+    updated = 0
+    for r in rows:
+        score, segment = calc_audience_segment(
+            r.get("bio") or "", r.get("website") or "", r.get("username") or ""
+        )
+        with get_cursor() as cur:
+            cur.execute(
+                "UPDATE creator_features SET audience_segment_score = %s WHERE creator_id = %s",
+                (score, r["id"]),
+            )
+            cur.execute(
+                "UPDATE creators SET creator_segment = %s WHERE id = %s AND creator_segment IS DISTINCT FROM %s",
+                (segment, r["id"], segment),
+            )
+        updated += 1
+    if updated:
+        logger.info("Backfilled audience_segment_score for %d existing creators", updated)
+    return updated
 
 
 def backfill_missing_features() -> int:
