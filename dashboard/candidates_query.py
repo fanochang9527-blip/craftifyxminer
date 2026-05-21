@@ -78,3 +78,65 @@ def calc_pagination(total: int, page: int, per_page: int) -> tuple[int, int]:
     page = max(1, min(page, total_pages))
     offset = (page - 1) * per_page
     return offset, total_pages
+
+
+def build_assigned_count_sql(
+    where_sql: str,
+    order_sql: str,
+    bd_count: int,
+    bd_index: int,
+) -> str:
+    """Build a COUNT query that filters candidates by BD assignment.
+
+    Uses ROW_NUMBER() to enumerate results in the given order, then keeps
+    rows where (rn - 1) % bd_count == bd_index (0-based).
+    """
+    return f"""
+        WITH numbered AS (
+            SELECT ROW_NUMBER() OVER (ORDER BY {order_sql}) AS rn
+            FROM creators c
+            JOIN creator_scores cs ON cs.creator_id = c.id
+            LEFT JOIN creator_features cf ON cf.creator_id = c.id
+            WHERE {where_sql}
+        )
+        SELECT COUNT(*) AS cnt FROM numbered
+        WHERE (rn - 1) %% {bd_count} = {bd_index}
+    """
+
+
+def build_assigned_data_sql(
+    where_sql: str,
+    order_sql: str,
+    bd_count: int,
+    bd_index: int,
+) -> str:
+    """Build a data query that filters candidates by BD assignment.
+
+    Uses ROW_NUMBER() to enumerate results in the given order, then keeps
+    rows where (rn - 1) % bd_count == bd_index (0-based).  The outer query
+    orders by rn so pagination is stable.
+    """
+    return f"""
+        WITH numbered AS (
+            SELECT
+                c.id, c.username, c.bio, c.followers, c.bd_status, c.bd_decision, c.bd_decision_note,
+                c.discovery_strategy, c.has_merch_experience, c.website,
+                c.anchor_seed, c.discovered_via, c.discovered_date,
+                c.creator_type_manual, c.creator_type_auto,
+                COALESCE(c.creator_type_manual, c.creator_type_auto, 'unknown') AS creator_type,
+                cs.sellability_score, cs.is_sellable, cs.predicted_sales,
+                cs.sps_score, cs.centrality_tier, cs.seed_connections,
+                cf.audience_score, cf.engagement_score, cf.virality_score,
+                cf.posting_score, cf.monetization_score, cf.growth_score,
+                cf.character_consistency, cf.community_score,
+                ROW_NUMBER() OVER (ORDER BY {order_sql}) AS rn
+            FROM creators c
+            JOIN creator_scores cs ON cs.creator_id = c.id
+            LEFT JOIN creator_features cf ON cf.creator_id = c.id
+            WHERE {where_sql}
+        )
+        SELECT * FROM numbered
+        WHERE (rn - 1) %% {bd_count} = {bd_index}
+        ORDER BY rn
+        LIMIT %s OFFSET %s
+    """
