@@ -13,7 +13,7 @@ LOCKOUT_MINUTES = 30
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def attempt_login(
