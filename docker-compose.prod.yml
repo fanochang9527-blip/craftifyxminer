@@ -56,9 +56,6 @@ services:
     build: .
     command: python -m cron.daily_job
     restart: unless-stopped
-    depends_on:
-      server:
-        condition: service_healthy
     env_file: .env
     volumes:
       - app_logs:/app/logs
