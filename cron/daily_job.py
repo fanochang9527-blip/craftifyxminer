@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 scheduler = BlockingScheduler(timezone="Asia/Shanghai")
 
 
-@scheduler.scheduled_job("cron", hour=8, minute=0, id="daily_pipeline")
+@scheduler.scheduled_job("cron", hour=8, minute=0, id="daily_pipeline", misfire_grace_time=7200)
 def job_daily_pipeline():
     """Run the full daily pipeline with structured logging."""
     from pipeline.runner import run_full_pipeline
@@ -27,7 +27,7 @@ def job_daily_pipeline():
     logger.info("Daily pipeline finished: %s", result.get("status", "UNKNOWN"))
 
 
-@scheduler.scheduled_job("cron", hour=9, minute=0, id="backfill_graph")
+@scheduler.scheduled_job("cron", hour=9, minute=0, id="backfill_graph", misfire_grace_time=3600)
 def job_backfill_graph():
     """Backfill creator_graph from anchor_seed and recalculate centrality tiers."""
     logger.info("=== Job: backfill_graph ===")
@@ -40,7 +40,7 @@ def job_backfill_graph():
     )
 
 
-@scheduler.scheduled_job("cron", hour=10, minute=0, id="backfill_features")
+@scheduler.scheduled_job("cron", hour=10, minute=0, id="backfill_features", misfire_grace_time=3600)
 def job_backfill_features():
     """Backfill creator_features for any creators with tweets but missing features."""
     logger.info("=== Job: backfill_features ===")
@@ -49,7 +49,7 @@ def job_backfill_features():
     logger.info("Backfilled features for %d creators", count)
 
 
-@scheduler.scheduled_job("cron", hour=23, minute=0, id="daily_summary")
+@scheduler.scheduled_job("cron", hour=23, minute=0, id="daily_summary", misfire_grace_time=21600)
 def job_daily_summary():
     """Generate daily summary and ensure cost row exists."""
     logger.info("=== Job: daily_summary ===")
