@@ -1,5 +1,5 @@
 -- CraftifyX Miner 6.0 / 7.0 对齐 — 数据库 Schema (9 张核心表)
--- creator_features 8 维指标（已去除 circle_influence_score、data_confidence）
+-- creator_features 9 维指标（已去除 circle_influence_score、data_confidence，新增 audience_segment_score）
 -- 执行（库名/用户以 .env 为准，默认）: psql -U miner -d craftifyx_miner -f db/schema.sql
 
 -- 1. creators (主档案)

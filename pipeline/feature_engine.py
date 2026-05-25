@@ -247,7 +247,7 @@ def calc_community(tweets: list[dict], max_community: int = 100) -> float:
 # ------------------------------------------------------------------
 
 def compute_features_for_creator(creator_id: int) -> dict | None:
-    """Compute all 8 features for one creator and upsert into creator_features."""
+    """Compute all 9 features for one creator and upsert into creator_features."""
     creator = fetch_one("SELECT * FROM creators WHERE id = %s", (creator_id,))
     if not creator:
         return None

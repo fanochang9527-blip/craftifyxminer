@@ -267,6 +267,7 @@ radar:
   growth: "Growth"
   character_consistency: "Char. Consistency"
   community: "Community"
+  audience_segment: "Audience Segment"
 
 chart:
   count: "Count"

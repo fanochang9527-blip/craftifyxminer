@@ -267,6 +267,7 @@ radar:
   growth: "增长"
   character_consistency: "人设一致性"
   community: "社区"
+  audience_segment: "受众分段"
 
 chart:
   count: "数量"
