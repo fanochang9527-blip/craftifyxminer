@@ -134,7 +134,7 @@ _TIER_STYLE = {
 _FEATURE_KEYS = [
     "audience_score", "engagement_score", "virality_score",
     "posting_score", "monetization_score", "growth_score",
-    "character_consistency", "community_score",
+    "character_consistency", "community_score", "audience_segment_score",
 ]
 
 
@@ -320,6 +320,7 @@ def _render_candidates_table() -> None:
         t("radar.audience"), t("radar.engagement"), t("radar.virality"),
         t("radar.posting"), t("radar.monetization"), t("radar.growth"),
         t("radar.character_consistency"), t("radar.community"),
+        t("radar.audience_segment"),
     ]
 
     # -----------------------------------------------------------------------
