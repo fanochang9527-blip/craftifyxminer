@@ -63,3 +63,28 @@ def require_role(role: str) -> bool:
 def logout() -> None:
     st.session_state.pop("user", None)
     st.session_state.pop("login_time", None)
+
+
+def get_bd_distribution_info(current_user_id: int) -> tuple[int, int] | None:
+    """Return (bd_count, bd_index) for the current BD user.
+
+    Queries all active BD users ordered by id ascending.
+    - bd_count: total number of active BD users
+    - bd_index: 0-based index of current_user_id in that ordered list
+
+    Returns None if the user is not found among active BD users.
+    """
+    from db.connection import fetch_all
+
+    rows = fetch_all(
+        "SELECT id FROM users WHERE role = 'bd' AND is_active = true ORDER BY id"
+    )
+    if not rows:
+        return None
+    bd_count = len(rows)
+    user_ids = [r["id"] for r in rows]
+    try:
+        bd_index = user_ids.index(current_user_id)
+    except ValueError:
+        return None
+    return bd_count, bd_index

@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import streamlit as st
 
-from auth.session import require_login
+from auth.session import require_login, get_bd_distribution_info
 
 if not require_login():
     st.stop()
@@ -21,6 +21,8 @@ from dashboard.candidates_query import (
     CENTRALITY_OPTS,
     CREATOR_TYPE_OPTS,
     STRATEGY_OPTS,
+    build_assigned_count_sql,
+    build_assigned_data_sql,
     build_where_clauses,
     calc_pagination,
 )
@@ -224,42 +226,64 @@ def _render_candidates_table() -> None:
         only_sellable=only_sellable,
     )
 
-    count_query = f"""
-        SELECT COUNT(*) AS cnt
-        FROM creators c
-        JOIN creator_scores cs ON cs.creator_id = c.id
-        LEFT JOIN creator_features cf ON cf.creator_id = c.id
-        WHERE {where_sql}
-    """
-    total_row = fetch_one(count_query, tuple(params))
-    total_count = total_row["cnt"] if total_row else 0
+    order_sql = (
+        "cs.sps_score DESC"
+        if sort_mode == "legacy_sps"
+        else f"CASE WHEN COALESCE(cs.is_sellable, false) THEN COALESCE(cs.sps_score, 0) ELSE COALESCE(cs.sps_score, 0) * {NON_SELLABLE_SPS_WEIGHT} END DESC, COALESCE(cs.predicted_sales, 0) DESC, cs.sps_score DESC"
+    )
 
-    page = st.session_state.get("candidates_page", 1)
-    offset, total_pages = calc_pagination(total_count, page, per_page)
+    user = st.session_state.get("user", {})
+    is_admin = user.get("role") == "admin"
 
-    query = f"""
-        SELECT c.id, c.username, c.bio, c.followers, c.bd_status, c.bd_decision, c.bd_decision_note,
-               c.discovery_strategy, c.has_merch_experience, c.website,
-               c.anchor_seed, c.discovered_via, c.discovered_date,
-               c.creator_type_manual, c.creator_type_auto,
-               COALESCE(c.creator_type_manual, c.creator_type_auto, 'unknown') AS creator_type,
-               cs.sellability_score, cs.is_sellable, cs.predicted_sales,
-               cs.sps_score, cs.centrality_tier, cs.seed_connections,
-               cf.audience_score, cf.engagement_score, cf.virality_score,
-               cf.posting_score, cf.monetization_score, cf.growth_score,
-               cf.character_consistency, cf.community_score
-        FROM creators c
-        JOIN creator_scores cs ON cs.creator_id = c.id
-        LEFT JOIN creator_features cf ON cf.creator_id = c.id
-        WHERE {where_sql}
-        ORDER BY {
-            "cs.sps_score DESC"
-            if sort_mode == "legacy_sps"
-            else f"CASE WHEN COALESCE(cs.is_sellable, false) THEN COALESCE(cs.sps_score, 0) ELSE COALESCE(cs.sps_score, 0) * {NON_SELLABLE_SPS_WEIGHT} END DESC, COALESCE(cs.predicted_sales, 0) DESC, cs.sps_score DESC"
-        }
-        LIMIT %s OFFSET %s
-    """
-    candidates = fetch_all(query, tuple(params) + (per_page, offset))
+    if is_admin:
+        count_query = f"""
+            SELECT COUNT(*) AS cnt
+            FROM creators c
+            JOIN creator_scores cs ON cs.creator_id = c.id
+            LEFT JOIN creator_features cf ON cf.creator_id = c.id
+            WHERE {where_sql}
+        """
+        total_row = fetch_one(count_query, tuple(params))
+        total_count = total_row["cnt"] if total_row else 0
+
+        page = st.session_state.get("candidates_page", 1)
+        offset, total_pages = calc_pagination(total_count, page, per_page)
+
+        query = f"""
+            SELECT c.id, c.username, c.bio, c.followers, c.bd_status, c.bd_decision, c.bd_decision_note,
+                   c.discovery_strategy, c.has_merch_experience, c.website,
+                   c.anchor_seed, c.discovered_via, c.discovered_date,
+                   c.creator_type_manual, c.creator_type_auto,
+                   COALESCE(c.creator_type_manual, c.creator_type_auto, 'unknown') AS creator_type,
+                   cs.sellability_score, cs.is_sellable, cs.predicted_sales,
+                   cs.sps_score, cs.centrality_tier, cs.seed_connections,
+                   cf.audience_score, cf.engagement_score, cf.virality_score,
+                   cf.posting_score, cf.monetization_score, cf.growth_score,
+                   cf.character_consistency, cf.community_score
+            FROM creators c
+            JOIN creator_scores cs ON cs.creator_id = c.id
+            LEFT JOIN creator_features cf ON cf.creator_id = c.id
+            WHERE {where_sql}
+            ORDER BY {order_sql}
+            LIMIT %s OFFSET %s
+        """
+        candidates = fetch_all(query, tuple(params) + (per_page, offset))
+    else:
+        bd_info = get_bd_distribution_info(user.get("id"))
+        if bd_info is None:
+            bd_count, bd_index = 1, 0
+        else:
+            bd_count, bd_index = bd_info
+
+        count_query = build_assigned_count_sql(where_sql, order_sql, bd_count, bd_index)
+        total_row = fetch_one(count_query, tuple(params))
+        total_count = total_row["cnt"] if total_row else 0
+
+        page = st.session_state.get("candidates_page", 1)
+        offset, total_pages = calc_pagination(total_count, page, per_page)
+
+        query = build_assigned_data_sql(where_sql, order_sql, bd_count, bd_index)
+        candidates = fetch_all(query, tuple(params) + (per_page, offset))
 
     # -----------------------------------------------------------------------
     # Title + summary badges
