@@ -1,6 +1,6 @@
 """SPS ML 预测模型（Model B）— 统一模型（Ridge / XGBoost），预测销量。
 
-特征：10 维指标 + creator_type one-hot（6 列）= 16 维。
+特征：7 维销量相关指标 + creator_type one-hot（6 列）= 13 维。
 样本 < 30 用 Ridge，>= 30 用 XGBoost。
 """
 
@@ -29,14 +29,12 @@ FEATURE_COLS = [
     "posting_score",
     "monetization_score",
     "growth_score",
-    "character_consistency",
-    "community_score",
     "audience_segment_score",
 ]
 
 
 def _build_feature_vector(row: dict) -> np.ndarray:
-    """Build 16-dim feature vector: 10 scores + 6 one-hot creator_type."""
+    """Build 13-dim feature vector: 7 SPS-related scores + 6 one-hot creator_type."""
     scores = [float(row.get(col) or 0.0) for col in FEATURE_COLS]
     ctype = row.get("creator_type") or "unknown"
     one_hot = [1.0 if ctype == t else 0.0 for t in CREATOR_TYPES]
@@ -125,7 +123,7 @@ def predict_sales(features_row: dict) -> float | None:
     """Predict raw sales value for a single creator.
 
     Args:
-        features_row: dict with 10 feature scores + creator_type key.
+        features_row: dict with 7 SPS feature scores + creator_type key.
 
     Returns:
         Predicted sales (non-negative float), or None if model unavailable.
