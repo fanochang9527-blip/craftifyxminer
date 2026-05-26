@@ -15,6 +15,7 @@ from config.settings import (
     ANCHOR_LOW_VALUE_COOLDOWN_DAYS,
     ANCHOR_NORMAL_COOLDOWN_DAYS,
     APIFY_API_TOKEN,
+    APIFY_BUDGET_HARD_LIMIT,
     APIFY_CONFIG_PATH,
     DAILY_ANCHOR_COUNT,
     DAILY_APIFY_BUDGET_USD,
@@ -141,6 +142,9 @@ def trigger_l1_scan(
     )
     today_cost = float(cost_row["today_cost"]) if cost_row else 0.0
     if today_cost >= DAILY_APIFY_BUDGET_USD:
+        if APIFY_BUDGET_HARD_LIMIT:
+            logger.warning("Daily Apify budget exceeded ($%.2f >= $%.2f) — blocking", today_cost, DAILY_APIFY_BUDGET_USD)
+            return {"runs_started": 0, "budget_ok": False, "stored": 0}
         logger.warning("Daily Apify budget exceeded ($%.2f >= $%.2f) — continuing anyway", today_cost, DAILY_APIFY_BUDGET_USD)
 
     with open(APIFY_CONFIG_PATH, encoding="utf-8") as f:
