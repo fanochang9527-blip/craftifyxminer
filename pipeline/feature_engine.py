@@ -1,4 +1,4 @@
-"""10 维指标计算引擎 — 基于 Profile + Tweets 数据计算创作者特征。
+"""9 维指标计算引擎 — 基于 Profile + Tweets 数据计算创作者特征。
 
 计算结果写入 creator_features 表 (UNIQUE on creator_id)。
 """
@@ -46,7 +46,7 @@ def _parse_tweet_created_at(value: object):
 
 
 # ------------------------------------------------------------------
-# 10 维指标计算
+# 9 维指标计算
 # ------------------------------------------------------------------
 
 def calc_audience(followers: int, following: int = 0) -> float:
