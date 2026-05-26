@@ -73,6 +73,7 @@ STREAMLIT_PORT = int(os.getenv("STREAMLIT_PORT", "8501"))
 MONTHLY_BUDGET_USD = float(os.getenv("MONTHLY_BUDGET_USD", "500"))
 DAILY_APIFY_BUDGET_USD = float(os.getenv("DAILY_APIFY_BUDGET_USD", "40"))
 MONTHLY_LLM_BUDGET_USD = float(os.getenv("MONTHLY_LLM_BUDGET_USD", "10"))
+APIFY_BUDGET_HARD_LIMIT = os.getenv("APIFY_BUDGET_HARD_LIMIT", "false").lower() in ("1", "true", "yes")
 
 # --- 发现引擎 ---
 DAILY_ANCHOR_COUNT = int(os.getenv("DAILY_ANCHOR_COUNT", "20"))

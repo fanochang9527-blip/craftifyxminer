@@ -11,6 +11,7 @@ from apify_client import ApifyClient
 
 from config.settings import (
     APIFY_API_TOKEN,
+    APIFY_BUDGET_HARD_LIMIT,
     APIFY_CONFIG_PATH,
     DAILY_APIFY_BUDGET_USD,
     DEEP_SCRAPE_BATCH_SIZE,
@@ -42,12 +43,15 @@ def _get_pending_candidates(limit: int = DEEP_SCRAPE_BATCH_SIZE) -> list[dict]:
 
 
 def _check_budget() -> bool:
-    """Check daily budget — logs warning but never blocks."""
+    """Check daily budget. 若 APIFY_BUDGET_HARD_LIMIT=true 则阻断，否则仅警告。"""
     row = fetch_one(
         "SELECT COALESCE(SUM(apify_cost_usd), 0) AS today FROM cost_tracking WHERE date = CURRENT_DATE"
     )
     today = float(row["today"]) if row else 0.0
     if today >= DAILY_APIFY_BUDGET_USD:
+        if APIFY_BUDGET_HARD_LIMIT:
+            logger.warning("Daily Apify budget exceeded ($%.2f) — blocking pipeline", today)
+            return False
         logger.warning("Daily Apify budget exceeded ($%.2f) — continuing anyway", today)
     return True
 
