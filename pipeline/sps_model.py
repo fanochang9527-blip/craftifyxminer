@@ -66,7 +66,7 @@ def train_model() -> dict:
     X, y = _load_training_data()
     n_samples = X.shape[0]
 
-    if n_samples < 30:
+    if n_samples < 80:
         from sklearn.linear_model import Ridge
         model = Ridge(alpha=1.0)
         model_type = "Ridge"
