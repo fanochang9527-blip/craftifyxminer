@@ -139,11 +139,13 @@ def cv_sps() -> None:
                 model = Ridge(alpha=1.0)
             else:
                 model = XGBRegressor(
-                    n_estimators=100,
-                    max_depth=4,
-                    learning_rate=0.1,
-                    subsample=0.8,
-                    colsample_bytree=0.8,
+                    n_estimators=50,
+                    max_depth=3,
+                    learning_rate=0.05,
+                    subsample=0.6,
+                    colsample_bytree=0.6,
+                    reg_alpha=1.0,
+                    reg_lambda=2.0,
                     random_state=42,
                 )
             model.fit(X_train, y_train)

@@ -66,18 +66,20 @@ def train_model() -> dict:
     X, y = _load_training_data()
     n_samples = X.shape[0]
 
-    if n_samples < 80:
+    if n_samples < 30:
         from sklearn.linear_model import Ridge
         model = Ridge(alpha=1.0)
         model_type = "Ridge"
     else:
         from xgboost import XGBRegressor
         model = XGBRegressor(
-            n_estimators=100,
-            max_depth=4,
-            learning_rate=0.1,
-            subsample=0.8,
-            colsample_bytree=0.8,
+            n_estimators=50,
+            max_depth=3,
+            learning_rate=0.05,
+            subsample=0.6,
+            colsample_bytree=0.6,
+            reg_alpha=1.0,
+            reg_lambda=2.0,
             random_state=42,
         )
         model_type = "XGBoost"
