@@ -15,15 +15,35 @@ import joblib
 import numpy as np
 
 from config.settings import (
+    CREATOR_TYPES,
     SELLABILITY_LABEL_SALES_THRESHOLD,
     SELLABILITY_MODEL_META_PATH,
     SELLABILITY_MODEL_PATH,
     SELLABILITY_SCORE_THRESHOLD,
 )
 from db.connection import fetch_all
-from pipeline.sps_model import _build_feature_vector
+import numpy as np
 
 logger = logging.getLogger(__name__)
+
+
+FEATURE_COLS = [
+    "audience_score",
+    "engagement_score",
+    "monetization_score",
+    "growth_score",
+    "character_consistency",
+    "community_score",
+    "audience_segment_score",
+]
+
+
+def _build_feature_vector(row: dict) -> np.ndarray:
+    """Build 13-dim feature vector: 7 sellability-related scores + 6 one-hot creator_type."""
+    scores = [float(row.get(col) or 0.0) for col in FEATURE_COLS]
+    ctype = row.get("creator_type") or "unknown"
+    one_hot = [1.0 if ctype == t else 0.0 for t in CREATOR_TYPES]
+    return np.array(scores + one_hot)
 
 
 def _load_training_rows() -> tuple[list[dict], list[float]]:
