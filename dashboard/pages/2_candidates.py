@@ -235,6 +235,8 @@ def _render_candidates_table() -> None:
     user = st.session_state.get("user", {})
     is_admin = user.get("role") == "admin"
 
+    current_user_id = user.get("id")
+
     if is_admin:
         count_query = f"""
             SELECT COUNT(*) AS cnt
@@ -259,30 +261,32 @@ def _render_candidates_table() -> None:
                    cs.sps_score, cs.centrality_tier, cs.seed_connections,
                    cf.audience_score, cf.engagement_score, cf.virality_score,
                    cf.posting_score, cf.monetization_score, cf.growth_score,
-                   cf.character_consistency, cf.community_score
+                   cf.character_consistency, cf.community_score,
+                   bd.decision AS my_decision, bd.note AS my_note
             FROM creators c
             JOIN creator_scores cs ON cs.creator_id = c.id
             LEFT JOIN creator_features cf ON cf.creator_id = c.id
+            LEFT JOIN bd_decisions bd ON bd.creator_id = c.id AND bd.user_id = %s
             WHERE {where_sql}
             ORDER BY {order_sql}
             LIMIT %s OFFSET %s
         """
-        candidates = fetch_all(query, tuple(params) + (per_page, offset))
+        candidates = fetch_all(query, tuple(params) + (current_user_id, per_page, offset))
     else:
-        bd_info = get_bd_distribution_info(user.get("id"))
+        bd_info = get_bd_distribution_info(current_user_id)
         if bd_info is None:
             bd_count, bd_index = 1, 0
         else:
             bd_count, bd_index = bd_info
 
-        count_query = build_assigned_count_sql(where_sql, order_sql, bd_count, bd_index)
+        count_query = build_assigned_count_sql(where_sql, order_sql, bd_count, bd_index, current_user_id)
         total_row = fetch_one(count_query, tuple(params))
         total_count = total_row["cnt"] if total_row else 0
 
         page = st.session_state.get("candidates_page", 1)
         offset, total_pages = calc_pagination(total_count, page, per_page)
 
-        query = build_assigned_data_sql(where_sql, order_sql, bd_count, bd_index)
+        query = build_assigned_data_sql(where_sql, order_sql, bd_count, bd_index, current_user_id)
         candidates = fetch_all(query, tuple(params) + (per_page, offset))
 
     # -----------------------------------------------------------------------
@@ -373,7 +377,7 @@ def _render_candidates_table() -> None:
         row_cols[6].caption(source)
         row_cols[7].caption(disc_str)
 
-        current_decision = c.get("bd_decision")
+        current_decision = c.get("my_decision") or c.get("bd_decision")
 
         with row_cols[8]:
             act_cols = st.columns([1.1, 1, 1, 1])
@@ -396,8 +400,22 @@ def _render_candidates_table() -> None:
                     if st.button("✅", key=f"int_{cid}", help=t("candidates.btn_interested")):
                         with get_cursor() as cur:
                             cur.execute(
-                                "UPDATE creators SET bd_decision = 'interested', bd_status = 'interested', last_bd_update = NOW() WHERE id = %s",
-                                (cid,),
+                                """
+                                INSERT INTO bd_decisions (creator_id, user_id, decision, previous_decision, updated_at)
+                                VALUES (%s, %s, %s,
+                                    (SELECT decision FROM bd_decisions WHERE creator_id = %s AND user_id = %s),
+                                    NOW()
+                                )
+                                ON CONFLICT (creator_id, user_id)
+                                DO UPDATE SET decision = EXCLUDED.decision,
+                                              previous_decision = EXCLUDED.previous_decision,
+                                              updated_at = NOW()
+                                """,
+                                (cid, current_user_id, "interested", cid, current_user_id),
+                            )
+                            cur.execute(
+                                "UPDATE creators SET bd_decision = %s, bd_status = %s, last_bd_update = NOW() WHERE id = %s",
+                                ("interested", "interested", cid),
                             )
                         st.toast(t("candidates.marked_interested"))
                         st.rerun()
@@ -411,8 +429,22 @@ def _render_candidates_table() -> None:
                     if st.button("🚫", key=f"unfit_{cid}", help=t("candidates.btn_rejected_unfit")):
                         with get_cursor() as cur:
                             cur.execute(
-                                "UPDATE creators SET bd_decision = 'rejected_unfit', bd_status = 'rejected_unfit', last_bd_update = NOW() WHERE id = %s",
-                                (cid,),
+                                """
+                                INSERT INTO bd_decisions (creator_id, user_id, decision, previous_decision, updated_at)
+                                VALUES (%s, %s, %s,
+                                    (SELECT decision FROM bd_decisions WHERE creator_id = %s AND user_id = %s),
+                                    NOW()
+                                )
+                                ON CONFLICT (creator_id, user_id)
+                                DO UPDATE SET decision = EXCLUDED.decision,
+                                              previous_decision = EXCLUDED.previous_decision,
+                                              updated_at = NOW()
+                                """,
+                                (cid, current_user_id, "rejected_unfit", cid, current_user_id),
+                            )
+                            cur.execute(
+                                "UPDATE creators SET bd_decision = %s, bd_status = %s, last_bd_update = NOW() WHERE id = %s",
+                                ("rejected_unfit", "rejected_unfit", cid),
                             )
                         st.toast(t("candidates.marked_rejected_unfit"))
                         st.rerun()
@@ -426,8 +458,22 @@ def _render_candidates_table() -> None:
                     if st.button("❌", key=f"notcr_{cid}", help=t("candidates.btn_rejected_not_creator")):
                         with get_cursor() as cur:
                             cur.execute(
-                                "UPDATE creators SET bd_decision = 'rejected_not_creator', bd_status = 'rejected_not_creator', last_bd_update = NOW() WHERE id = %s",
-                                (cid,),
+                                """
+                                INSERT INTO bd_decisions (creator_id, user_id, decision, previous_decision, updated_at)
+                                VALUES (%s, %s, %s,
+                                    (SELECT decision FROM bd_decisions WHERE creator_id = %s AND user_id = %s),
+                                    NOW()
+                                )
+                                ON CONFLICT (creator_id, user_id)
+                                DO UPDATE SET decision = EXCLUDED.decision,
+                                              previous_decision = EXCLUDED.previous_decision,
+                                              updated_at = NOW()
+                                """,
+                                (cid, current_user_id, "rejected_not_creator", cid, current_user_id),
+                            )
+                            cur.execute(
+                                "UPDATE creators SET bd_decision = %s, bd_status = %s, last_bd_update = NOW() WHERE id = %s",
+                                ("rejected_not_creator", "rejected_not_creator", cid),
                             )
                         st.toast(t("candidates.marked_rejected_not_creator"))
                         st.rerun()
@@ -455,14 +501,41 @@ def _render_candidates_table() -> None:
                         t("candidates.note_placeholder"),
                         key=f"note_{cid}",
                         placeholder=t("candidates.note_placeholder"),
-                        value=c.get("bd_decision_note") or "",
+                        value=c.get("my_note") or c.get("bd_decision_note") or "",
                     )
                 with ncols[1]:
                     if st.button(t("candidates.save_note"), key=f"note_save_{cid}"):
                         with get_cursor() as cur:
-                            cur.execute("UPDATE creators SET bd_decision_note = %s WHERE id = %s", (note, cid))
+                            cur.execute(
+                                """
+                                INSERT INTO bd_decisions (creator_id, user_id, decision, note, updated_at)
+                                VALUES (%s, %s,
+                                    COALESCE((SELECT decision FROM bd_decisions WHERE creator_id = %s AND user_id = %s), 'interested'),
+                                    %s, NOW()
+                                )
+                                ON CONFLICT (creator_id, user_id)
+                                DO UPDATE SET note = EXCLUDED.note, updated_at = NOW()
+                                """,
+                                (cid, current_user_id, cid, current_user_id, note),
+                            )
                         st.toast(t("candidates.note_saved"))
                         st.rerun()
+                # 决策统计
+                decision_stats = fetch_one(
+                    """
+                    SELECT
+                        COUNT(*) FILTER (WHERE decision = 'interested') AS interested_count,
+                        COUNT(*) FILTER (WHERE decision = 'rejected_unfit') AS rejected_unfit_count,
+                        COUNT(*) FILTER (WHERE decision = 'rejected_not_creator') AS rejected_not_creator_count,
+                        STRING_AGG(u.username || ': ' || bd.decision, ', ' ORDER BY u.username) AS decisions_by_user
+                    FROM bd_decisions bd
+                    JOIN users u ON u.id = bd.user_id
+                    WHERE bd.creator_id = %s
+                    """,
+                    (cid,),
+                )
+                if decision_stats and decision_stats.get("decisions_by_user"):
+                    st.caption(f"📋 决策记录: {decision_stats['decisions_by_user']}")
                 current_type = c.get("creator_type_manual") or c.get("creator_type_auto") or "unknown"
                 type_opts = CREATOR_TYPE_OPTS
                 type_idx = type_opts.index(current_type) if current_type in type_opts else len(type_opts) - 1
