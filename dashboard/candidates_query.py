@@ -85,18 +85,23 @@ def build_assigned_count_sql(
     order_sql: str,
     bd_count: int,
     bd_index: int,
+    current_user_id: int | None = None,
 ) -> str:
     """Build a COUNT query that filters candidates by BD assignment.
 
     Uses ROW_NUMBER() to enumerate results in the given order, then keeps
     rows where (rn - 1) % bd_count == bd_index (0-based).
     """
+    bd_join = ""
+    if current_user_id is not None:
+        bd_join = f"LEFT JOIN bd_decisions bd ON bd.creator_id = c.id AND bd.user_id = {current_user_id}"
     return f"""
         WITH numbered AS (
             SELECT ROW_NUMBER() OVER (ORDER BY {order_sql}) AS rn
             FROM creators c
             JOIN creator_scores cs ON cs.creator_id = c.id
             LEFT JOIN creator_features cf ON cf.creator_id = c.id
+            {bd_join}
             WHERE {where_sql}
         )
         SELECT COUNT(*) AS cnt FROM numbered
@@ -109,6 +114,7 @@ def build_assigned_data_sql(
     order_sql: str,
     bd_count: int,
     bd_index: int,
+    current_user_id: int | None = None,
 ) -> str:
     """Build a data query that filters candidates by BD assignment.
 
@@ -116,6 +122,11 @@ def build_assigned_data_sql(
     rows where (rn - 1) % bd_count == bd_index (0-based).  The outer query
     orders by rn so pagination is stable.
     """
+    bd_join = ""
+    bd_select = ""
+    if current_user_id is not None:
+        bd_join = f"LEFT JOIN bd_decisions bd ON bd.creator_id = c.id AND bd.user_id = {current_user_id}"
+        bd_select = "bd.decision AS my_decision, bd.note AS my_note,"
     return f"""
         WITH numbered AS (
             SELECT
@@ -129,10 +140,12 @@ def build_assigned_data_sql(
                 cf.audience_score, cf.engagement_score, cf.virality_score,
                 cf.posting_score, cf.monetization_score, cf.growth_score,
                 cf.character_consistency, cf.community_score,
+                {bd_select}
                 ROW_NUMBER() OVER (ORDER BY {order_sql}) AS rn
             FROM creators c
             JOIN creator_scores cs ON cs.creator_id = c.id
             LEFT JOIN creator_features cf ON cf.creator_id = c.id
+            {bd_join}
             WHERE {where_sql}
         )
         SELECT * FROM numbered

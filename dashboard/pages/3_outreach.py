@@ -35,13 +35,20 @@ interested = fetch_all(
     """SELECT c.id, c.username, c.followers,
               COALESCE(c.creator_type_manual, c.creator_type_auto, 'unknown') AS creator_type,
               cs.sps_score, cs.centrality_tier,
-              c.last_bd_update AS entry_time,
+              (SELECT MAX(bd.created_at) FROM bd_decisions bd WHERE bd.creator_id = c.id AND bd.decision = 'interested') AS entry_time,
+              (SELECT STRING_AGG(u.username, ', ')
+               FROM bd_decisions bd
+               JOIN users u ON u.id = bd.user_id
+               WHERE bd.creator_id = c.id AND bd.decision = 'interested') AS interested_users,
               (SELECT ol.bd_username FROM outreach_log ol
                WHERE ol.creator_id = c.id ORDER BY ol.contacted_at DESC LIMIT 1) AS bd_account,
               (SELECT MAX(ol.contacted_at) FROM outreach_log ol WHERE ol.creator_id = c.id) AS last_contact
        FROM creators c
        LEFT JOIN creator_scores cs ON cs.creator_id = c.id
-       WHERE c.bd_decision = 'interested'
+       WHERE EXISTS (
+           SELECT 1 FROM bd_decisions bd
+           WHERE bd.creator_id = c.id AND bd.decision = 'interested'
+       )
          AND c.followers > 500
        ORDER BY cs.sps_score DESC NULLS LAST"""
 )
@@ -51,7 +58,7 @@ if interested:
     df["homepage"] = df["username"].apply(lambda u: f"https://x.com/{u}")
     display_cols = [
         "id", "creator_type", "username", "homepage",
-        "followers", "sps_score", "bd_account", "entry_time",
+        "followers", "sps_score", "interested_users", "bd_account", "entry_time",
     ]
     existing_cols = [c for c in display_cols if c in df.columns]
     st.dataframe(
@@ -64,6 +71,7 @@ if interested:
             "homepage": st.column_config.LinkColumn(t("outreach.col_homepage")),
             "followers": st.column_config.NumberColumn(t("outreach.col_followers"), format="%d"),
             "sps_score": st.column_config.NumberColumn(t("outreach.col_sps"), format="%.1f"),
+            "interested_users": st.column_config.TextColumn("感兴趣用户"),
             "bd_account": st.column_config.TextColumn(t("outreach.col_bd_account")),
             "entry_time": st.column_config.DatetimeColumn(t("outreach.col_entry_time")),
         },

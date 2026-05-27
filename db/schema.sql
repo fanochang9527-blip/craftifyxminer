@@ -199,3 +199,19 @@ CREATE TABLE IF NOT EXISTS model_evaluations (
     mae FLOAT,
     notes TEXT
 );
+
+-- 13. bd_decisions (BD 用户审核决策 — 多用户模式下记录每位用户对创作者的决策)
+CREATE TABLE IF NOT EXISTS bd_decisions (
+    id SERIAL PRIMARY KEY,
+    creator_id INTEGER REFERENCES creators(id) NOT NULL,
+    user_id INTEGER REFERENCES users(id) NOT NULL,
+    decision VARCHAR(20) NOT NULL,        -- 'interested' | 'rejected_unfit' | 'rejected_not_creator'
+    previous_decision VARCHAR(20),
+    note TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(creator_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_bd_decisions_creator ON bd_decisions (creator_id);
+CREATE INDEX IF NOT EXISTS idx_bd_decisions_user ON bd_decisions (user_id);
+CREATE INDEX IF NOT EXISTS idx_bd_decisions_decision ON bd_decisions (decision);
