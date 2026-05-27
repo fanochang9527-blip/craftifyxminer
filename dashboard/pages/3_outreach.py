@@ -76,19 +76,47 @@ else:
 # ---------------------------------------------------------------------------
 st.markdown("---")
 st.subheader(t("outreach.model_health"))
-latest_eval = fetch_one(
+
+latest_sell = fetch_one(
     """SELECT * FROM model_evaluations
+       WHERE model_name = 'sellability'
        ORDER BY evaluated_at DESC LIMIT 1"""
 )
-if latest_eval:
-    mcols = st.columns(5)
-    mcols[0].metric("Recall", f"{(latest_eval.get('recall') or 0) * 100:.1f}%")
-    mcols[1].metric("Precision", f"{(latest_eval.get('precision_score') or 0) * 100:.1f}%")
-    mcols[2].metric("F2-Score", f"{(latest_eval.get('f2_score') or 0) * 100:.1f}%")
-    mcols[3].metric("P@250", f"{(latest_eval.get('precision_at_250') or 0) * 100:.1f}%")
-    mcols[4].metric("Spearman", f"{latest_eval.get('spearman_corr') or 0:.3f}")
-    st.caption(f"Model: {latest_eval.get('model_version', 'N/A')} | "
-               f"Evaluated: {latest_eval.get('evaluated_at', 'N/A')}")
+latest_sps = fetch_one(
+    """SELECT * FROM model_evaluations
+       WHERE model_name = 'sps'
+       ORDER BY evaluated_at DESC LIMIT 1"""
+)
+
+if latest_sell or latest_sps:
+    if latest_sell:
+        st.markdown("**Sellability** (分类)")
+        scols = st.columns(4)
+        recall = latest_sell.get("recall")
+        precision = latest_sell.get("precision_score")
+        f2 = latest_sell.get("f2_score")
+        scols[0].metric("Recall", f"{recall * 100:.1f}%" if recall is not None else "N/A")
+        scols[1].metric("Precision", f"{precision * 100:.1f}%" if precision is not None else "N/A")
+        scols[2].metric("F2-Score", f"{f2 * 100:.1f}%" if f2 is not None else "N/A")
+        scols[3].metric("n_seeds", latest_sell.get("n_seeds", "N/A"))
+        st.caption(f"Algorithm: {latest_sell.get('model_algorithm', 'N/A')} | "
+                   f"Version: {latest_sell.get('model_version', 'N/A')} | "
+                   f"Evaluated: {latest_sell.get('evaluated_at', 'N/A')}")
+
+    if latest_sps:
+        st.markdown("**SPS** (排序+回归)")
+        pcols = st.columns(4)
+        p250 = latest_sps.get("precision_at_250")
+        spearman = latest_sps.get("spearman_corr")
+        r2 = latest_sps.get("r2")
+        mae = latest_sps.get("mae")
+        pcols[0].metric("P@250", f"{p250 * 100:.1f}%" if p250 is not None else "N/A")
+        pcols[1].metric("Spearman", f"{spearman:.3f}" if spearman is not None else "N/A")
+        pcols[2].metric("R²", f"{r2:.3f}" if r2 is not None else "N/A")
+        pcols[3].metric("MAE", f"{mae:.1f}" if mae is not None else "N/A")
+        st.caption(f"Version: {latest_sps.get('model_version', 'N/A')} | "
+                   f"n_seeds: {latest_sps.get('n_seeds', 'N/A')} | "
+                   f"Evaluated: {latest_sps.get('evaluated_at', 'N/A')}")
 else:
     st.info("No model evaluation data yet.")
 

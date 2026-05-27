@@ -191,11 +191,13 @@ def run_full_pipeline(
 
     # Step 8: Model evaluation
     with _StepTimer(8, total, steps[7]) as st:
-        eval_result = evaluate_model()
-        recall = eval_result.get("recall", "N/A")
-        p250 = eval_result.get("precision_at_250", "N/A")
+        eval_results = evaluate_model()
+        sell_result = next((r for r in eval_results if r.get("model_name") == "sellability"), {})
+        sps_result = next((r for r in eval_results if r.get("model_name") == "sps"), {})
+        recall = sell_result.get("recall", "N/A")
+        p250 = sps_result.get("precision_at_250", "N/A")
         st.result_line = f"recall={recall}, P@250={p250}"
-        summary["evaluation"] = eval_result
+        summary["evaluation"] = eval_results
     if st.failed:
         summary["errors"].append(("evaluation", st.result_line))
 
