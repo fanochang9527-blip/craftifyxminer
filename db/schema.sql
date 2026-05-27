@@ -179,9 +179,10 @@ CREATE TABLE IF NOT EXISTS login_attempts (
 CREATE INDEX IF NOT EXISTS idx_login_attempts_ip ON login_attempts (ip_address, attempted_at);
 CREATE INDEX IF NOT EXISTS idx_login_attempts_user ON login_attempts (username, attempted_at);
 
--- 12. model_evaluations (SPS 模型评估 — 与 migration 004 对齐，删库重建时一次到位)
+-- 12. model_evaluations (双模型独立评估 — sellability + sps 各一行)
 CREATE TABLE IF NOT EXISTS model_evaluations (
     id SERIAL PRIMARY KEY,
+    model_name VARCHAR(20),        -- 'sellability' | 'sps'
     evaluated_at TIMESTAMP DEFAULT NOW(),
     model_version TEXT,
     n_seeds INTEGER,
@@ -196,6 +197,5 @@ CREATE TABLE IF NOT EXISTS model_evaluations (
     spearman_corr FLOAT,
     r2 FLOAT,
     mae FLOAT,
-    sps_threshold FLOAT,
     notes TEXT
 );
