@@ -169,9 +169,12 @@ def train_model() -> dict:
     SELLABILITY_MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(model, SELLABILITY_MODEL_PATH)
 
+    feature_names = FEATURE_COLS + [f"type_{t}" for t in CREATOR_TYPES]
     meta = {
         "model_type": model_type,
         "n_samples": int(n_samples),
+        "n_features": len(feature_names),
+        "feature_names": feature_names,
         "n_positive": int(y.sum()),
         "n_negative": int((1 - y).sum()),
         "trained_at": datetime.utcnow().isoformat(),
