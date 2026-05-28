@@ -46,6 +46,13 @@ def evaluate_sellability() -> dict | None:
 
     Returns:
         Metrics dict or None if insufficient data.
+
+    FIXME: 数据泄露 — 评价数据与训练数据高度重叠。
+    Sellability 模型训练时使用 creators.bd_decision 作为标签，
+    evaluate_sellability() 同样查询 bd_decision 进行评价。
+    当前 BD 人工审核样本量不足（<20 条时会回退到种子/伪标签），
+    无法拆分独立的训练/测试集。待样本量充足后（建议 >=200 条有标签数据），
+    应改用时间窗口隔离（如仅使用模型训练后新增的 BD 反馈）或创作者 ID 隔离。
     """
     cls_rows = fetch_all(
         """SELECT cs.sellability_score, c.bd_decision
@@ -141,6 +148,11 @@ def evaluate_sps() -> dict | None:
     p_at_250 = float(top_true.sum()) / top_k if top_k > 0 else None
 
     # --- Regression metrics: predicted_sales vs actual GMV ---
+    # FIXME: 回归评价目标不一致。
+    # SPS 模型训练时以 creators.total_sales 为目标变量，
+    # 而回归评价使用 sales_feedback.gmv 作为实际值。
+    # 两者数据口径不同，导致 R²/MAE/Spearman 指标不能真实反映模型拟合效果。
+    # 待数据口径统一后再修正。
     sales_rows = fetch_all(
         """SELECT cs.predicted_sales, SUM(sf.gmv) AS actual_sales
            FROM creator_scores cs
