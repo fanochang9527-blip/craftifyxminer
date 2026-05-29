@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS tweets (
     collected_at TIMESTAMP DEFAULT NOW()
 );
 
--- 3. creator_features (8 维指标)
+-- 3. creator_features (9 维组合特征 + 5 维原始特征)
 CREATE TABLE IF NOT EXISTS creator_features (
     id SERIAL PRIMARY KEY,
     creator_id INTEGER REFERENCES creators(id) UNIQUE,
@@ -63,7 +63,13 @@ CREATE TABLE IF NOT EXISTS creator_features (
     monetization_score FLOAT,
     character_consistency FLOAT,
     community_score FLOAT,
-    audience_segment_score FLOAT
+    audience_segment_score FLOAT,
+    -- 原始特征（用于 ML V2 实验组）
+    social_engagement_rate FLOAT,
+    conversation_rate FLOAT,
+    fanart_ratio FLOAT,
+    virality_raw_ratio FLOAT,
+    monthly_engagement_base FLOAT
 );
 
 -- 4. creator_graph (关系图谱)

@@ -15,10 +15,15 @@ from pipeline.feature_engine import (
     calc_audience_segment,
     calc_character_consistency,
     calc_community,
+    calc_conversation_rate,
     calc_engagement,
+    calc_fanart_ratio,
     calc_monetization,
+    calc_monthly_engagement_base,
     calc_posting,
+    calc_social_engagement_rate,
     calc_virality,
+    calc_virality_raw,
 )
 
 
@@ -231,4 +236,61 @@ class TestCommunity:
         tweets = [_make_tweet(text="Just a regular tweet")]
         score = calc_community(tweets)
         assert score >= 0
+
+
+class TestSocialEngagementRate:
+    def test_zero_followers(self):
+        tweets = [_make_tweet(likes=10, retweets=5)]
+        assert calc_social_engagement_rate(tweets, 0) == 0.0
+
+    def test_empty_tweets(self):
+        assert calc_social_engagement_rate([], 1000) == 0.0
+
+    def test_normal_rate(self):
+        tweets = [_make_tweet(likes=10, retweets=5) for _ in range(2)]
+        rate = calc_social_engagement_rate(tweets, 1000)
+        # avg_likes=10, avg_rts=5, rate = 15/1000*100 = 1.5
+        assert rate == pytest.approx(1.5)
+
+
+class TestConversationRate:
+    def test_zero_followers(self):
+        tweets = [_make_tweet(replies=3)]
+        assert calc_conversation_rate(tweets, 0) == 0.0
+
+    def test_normal_rate(self):
+        tweets = [_make_tweet(replies=10) for _ in range(2)]
+        rate = calc_conversation_rate(tweets, 1000)
+        # avg_replies=10, rate = 10/1000*100 = 1.0
+        assert rate == pytest.approx(1.0)
+
+
+class TestFanartRatio:
+    def test_empty_tweets(self):
+        assert calc_fanart_ratio([]) == 0.0
+
+    def test_all_fanart(self):
+        tweets = [_make_tweet(text="#fanart art1"), _make_tweet(text="fanart art2")]
+        assert calc_fanart_ratio(tweets) == 100.0
+
+    def test_half_fanart(self):
+        tweets = [_make_tweet(text="#fanart art1"), _make_tweet(text="normal tweet")]
+        assert calc_fanart_ratio(tweets) == 50.0
+
+
+class TestViralityRaw:
+    def test_zero_monthly(self):
+        assert calc_virality_raw(100, 0) == 0.0
+
+    def test_not_capped(self):
+        # 原公式 capped 在 10，新公式不封顶
+        assert calc_virality_raw(1000, 10) == 100.0
+
+    def test_ratio_5x(self):
+        assert calc_virality_raw(500, 100) == 5.0
+
+
+class TestMonthlyEngagementBase:
+    def test_returns_monthly_avg(self):
+        assert calc_monthly_engagement_base(42.0) == 42.0
 
