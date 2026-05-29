@@ -271,7 +271,7 @@ def _render_candidates_table() -> None:
             ORDER BY {order_sql}
             LIMIT %s OFFSET %s
         """
-        candidates = fetch_all(query, tuple(params) + (current_user_id, per_page, offset))
+        candidates = fetch_all(query, (current_user_id,) + tuple(params) + (per_page, offset))
     else:
         bd_info = get_bd_distribution_info(current_user_id)
         if bd_info is None:
