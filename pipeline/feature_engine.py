@@ -111,6 +111,59 @@ def calc_virality(top3_avg: float, monthly_avg: float) -> float:
     return ratio * 10.0
 
 
+def calc_social_engagement_rate(tweets: list[dict], followers: int) -> float:
+    """(avg_likes + avg_retweets) / followers * 100
+
+    反映内容传播力——粉丝对内容的被动认可（点赞、转发）。
+    """
+    if followers <= 0 or not tweets:
+        return 0.0
+    total_likes = sum(float(tw.get("likes") or 0) for tw in tweets)
+    total_rts = sum(float(tw.get("retweets") or 0) for tw in tweets)
+    avg_likes = total_likes / len(tweets)
+    avg_rts = total_rts / len(tweets)
+    return (avg_likes + avg_rts) / followers * 100.0
+
+
+def calc_conversation_rate(tweets: list[dict], followers: int) -> float:
+    """avg_replies / followers * 100
+
+    反映作者与粉丝的深度互动率——粉丝愿意在帖子下与作者对话。
+    """
+    if followers <= 0 or not tweets:
+        return 0.0
+    total_replies = sum(float(tw.get("replies") or 0) for tw in tweets)
+    avg_replies = total_replies / len(tweets)
+    return avg_replies / followers * 100.0
+
+
+def calc_fanart_ratio(tweets: list[dict]) -> float:
+    """fanart_tweets / total_tweets * 100"""
+    if not tweets:
+        return 0.0
+    fanart_count = 0
+    for tw in tweets:
+        text = (tw.get("text") or "").lower()
+        if "fanart" in text or "#fanart" in text or "fan art" in text:
+            fanart_count += 1
+    return fanart_count / len(tweets) * 100.0
+
+
+def calc_virality_raw(top3_avg: float, monthly_avg: float) -> float:
+    """top3_avg / monthly_avg，不封顶。
+
+    替代 capped virality_score，保留异常爆款信号。
+    """
+    if monthly_avg <= 0:
+        return 0.0
+    return top3_avg / monthly_avg
+
+
+def calc_monthly_engagement_base(monthly_avg: float) -> float:
+    """保留 monthly_avg 绝对值作为 virality_raw_ratio 的基数参考。"""
+    return monthly_avg
+
+
 def calc_posting(tweets: list[dict]) -> float:
     """Posting score based on actual 30-day tweet count and date range.
 
@@ -272,6 +325,12 @@ def compute_features_for_creator(creator_id: int) -> dict | None:
 
     audience_segment_score, segment = calc_audience_segment(bio, website, creator.get("username") or "")
 
+    social_engagement_rate = calc_social_engagement_rate(tweets, followers)
+    conversation_rate = calc_conversation_rate(tweets, followers)
+    fanart_ratio = calc_fanart_ratio(tweets)
+    virality_raw_ratio = calc_virality_raw(top3_avg, monthly_avg)
+    monthly_engagement_base = calc_monthly_engagement_base(monthly_avg)
+
     features = {
         "audience_score": calc_audience(followers, following),
         "engagement_score": calc_engagement(tweets, followers),
@@ -282,6 +341,11 @@ def compute_features_for_creator(creator_id: int) -> dict | None:
         "character_consistency": calc_character_consistency(tweets),
         "community_score": calc_community(tweets),
         "audience_segment_score": audience_segment_score,
+        "social_engagement_rate": social_engagement_rate,
+        "conversation_rate": conversation_rate,
+        "fanart_ratio": fanart_ratio,
+        "virality_raw_ratio": virality_raw_ratio,
+        "monthly_engagement_base": monthly_engagement_base,
     }
 
     with get_cursor() as cur:
@@ -289,10 +353,14 @@ def compute_features_for_creator(creator_id: int) -> dict | None:
             """INSERT INTO creator_features
                    (creator_id, audience_score, engagement_score, virality_score,
                     growth_score, posting_score, monetization_score,
-                    character_consistency, community_score, audience_segment_score)
+                    character_consistency, community_score, audience_segment_score,
+                    social_engagement_rate, conversation_rate, fanart_ratio,
+                    virality_raw_ratio, monthly_engagement_base)
                VALUES (%(cid)s, %(audience_score)s, %(engagement_score)s, %(virality_score)s,
                        %(growth_score)s, %(posting_score)s, %(monetization_score)s,
-                       %(character_consistency)s, %(community_score)s, %(audience_segment_score)s)
+                       %(character_consistency)s, %(community_score)s, %(audience_segment_score)s,
+                       %(social_engagement_rate)s, %(conversation_rate)s, %(fanart_ratio)s,
+                       %(virality_raw_ratio)s, %(monthly_engagement_base)s)
                ON CONFLICT (creator_id) DO UPDATE SET
                    audience_score = EXCLUDED.audience_score,
                    engagement_score = EXCLUDED.engagement_score,
@@ -303,6 +371,11 @@ def compute_features_for_creator(creator_id: int) -> dict | None:
                    character_consistency = EXCLUDED.character_consistency,
                    community_score = EXCLUDED.community_score,
                    audience_segment_score = EXCLUDED.audience_segment_score,
+                   social_engagement_rate = EXCLUDED.social_engagement_rate,
+                   conversation_rate = EXCLUDED.conversation_rate,
+                   fanart_ratio = EXCLUDED.fanart_ratio,
+                   virality_raw_ratio = EXCLUDED.virality_raw_ratio,
+                   monthly_engagement_base = EXCLUDED.monthly_engagement_base,
                    calculated_at = NOW()""",
             {"cid": creator_id, **features},
         )

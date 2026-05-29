@@ -9,7 +9,13 @@ for mod_name in ("psycopg2", "psycopg2.pool", "psycopg2.extras"):
 
 import numpy as np
 
-from pipeline.sellability_model import _load_training_rows, predict_sellability, train_model
+from pipeline.sellability_model import (
+    FEATURE_COLS_V2,
+    _build_feature_vector_v2,
+    _load_training_rows,
+    predict_sellability,
+    train_model,
+)
 
 
 class TestLoadTrainingRows:
@@ -72,3 +78,20 @@ class TestSingleClassSupport:
             "creator_type": "unknown",
         }
         assert predict_sellability(row) == 100.0
+
+
+class TestBuildFeatureVectorV2:
+    def test_length_13(self):
+        row = {k: float(i) for i, k in enumerate(FEATURE_COLS_V2)}
+        row["creator_type"] = "unknown"
+        v = _build_feature_vector_v2(row)
+        assert v.shape == (13,)
+
+    def test_one_hot_oc_creator(self):
+        row = {k: 0.0 for k in FEATURE_COLS_V2}
+        row["creator_type"] = "oc_creator"
+        v = _build_feature_vector_v2(row)
+        tail = v[7:].tolist()
+        from config.settings import CREATOR_TYPES
+        expected = [1.0 if t == "oc_creator" else 0.0 for t in CREATOR_TYPES]
+        assert tail == expected

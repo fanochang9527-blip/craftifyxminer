@@ -93,6 +93,11 @@ MODEL_PATH = PROJECT_ROOT / "models" / "sps_model.joblib"
 MODEL_META_PATH = PROJECT_ROOT / "models" / "sps_model_meta.json"
 SELLABILITY_MODEL_PATH = PROJECT_ROOT / "models" / "sellability_model.joblib"
 SELLABILITY_MODEL_META_PATH = PROJECT_ROOT / "models" / "sellability_model_meta.json"
+# V2 实验组模型（使用原始拆分特征）
+SPS_MODEL_V2_PATH = PROJECT_ROOT / "models" / "sps_model_v2.joblib"
+SPS_MODEL_V2_META_PATH = PROJECT_ROOT / "models" / "sps_model_v2_meta.json"
+SELLABILITY_MODEL_V2_PATH = PROJECT_ROOT / "models" / "sellability_model_v2.joblib"
+SELLABILITY_MODEL_V2_META_PATH = PROJECT_ROOT / "models" / "sellability_model_v2_meta.json"
 
 # --- 双模型口径 ---
 # 资格模型阈值：>= 阈值判定为“建议联系”

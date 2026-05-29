@@ -10,7 +10,13 @@ for mod_name in ("psycopg2", "psycopg2.pool", "psycopg2.extras"):
         sys.modules[mod_name] = MagicMock()
 
 from config.settings import CREATOR_TYPES
-from pipeline.sps_model import FEATURE_COLS, _build_feature_vector, predict_sps
+from pipeline.sps_model import (
+    FEATURE_COLS,
+    FEATURE_COLS_V2,
+    _build_feature_vector,
+    _build_feature_vector_v2,
+    predict_sps,
+)
 
 
 class TestBuildFeatureVector:
@@ -52,3 +58,19 @@ class TestPredictSPS:
             row = {k: 50.0 for k in FEATURE_COLS}
             row["creator_type"] = "vtuber"
             assert predict_fn(row) is None
+
+
+class TestBuildFeatureVectorV2:
+    def test_length_14(self):
+        row = {k: float(i) for i, k in enumerate(FEATURE_COLS_V2)}
+        row["creator_type"] = "unknown"
+        v = _build_feature_vector_v2(row)
+        assert v.shape == (14,)
+
+    def test_one_hot_vtuber(self):
+        row = {k: 0.0 for k in FEATURE_COLS_V2}
+        row["creator_type"] = "vtuber"
+        v = _build_feature_vector_v2(row)
+        from config.settings import CREATOR_TYPES
+        idx = 8 + CREATOR_TYPES.index("vtuber")
+        assert v[idx] == 1.0

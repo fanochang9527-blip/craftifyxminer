@@ -16,12 +16,15 @@ from config.settings import (
     CREATOR_TYPES,
     MODEL_META_PATH,
     MODEL_PATH,
+    SPS_MODEL_V2_META_PATH,
+    SPS_MODEL_V2_PATH,
     SPS_SALES_NORMALIZER,
 )
 from db.connection import fetch_all
 
 logger = logging.getLogger(__name__)
 
+# V1：组合特征（控制组，保持现有行为不变）
 FEATURE_COLS = [
     "audience_score",
     "engagement_score",
@@ -32,10 +35,32 @@ FEATURE_COLS = [
     "audience_segment_score",
 ]
 
+# V2：原始拆分特征（实验组，AB 测试用）
+# TODO: 当前数据量（seed ~142）下 V2 离线 CV 未显著优于 V1。
+# 当数据量翻倍（sps ≥300）后重测，若 V2 Spearman/MAE 显著领先再切换。
+FEATURE_COLS_V2 = [
+    "audience_score",
+    "monetization_score",
+    "posting_score",
+    "virality_raw_ratio",
+    "monthly_engagement_base",
+    "social_engagement_rate",
+    "conversation_rate",
+    "audience_segment_score",
+]
+
 
 def _build_feature_vector(row: dict) -> np.ndarray:
     """Build 13-dim feature vector: 7 SPS-related scores + 6 one-hot creator_type."""
     scores = [float(row.get(col) or 0.0) for col in FEATURE_COLS]
+    ctype = row.get("creator_type") or "unknown"
+    one_hot = [1.0 if ctype == t else 0.0 for t in CREATOR_TYPES]
+    return np.array(scores + one_hot)
+
+
+def _build_feature_vector_v2(row: dict) -> np.ndarray:
+    """Build 14-dim feature vector (V2): 8 raw scores + 6 one-hot creator_type."""
+    scores = [float(row.get(col) or 0.0) for col in FEATURE_COLS_V2]
     ctype = row.get("creator_type") or "unknown"
     one_hot = [1.0 if ctype == t else 0.0 for t in CREATOR_TYPES]
     return np.array(scores + one_hot)
@@ -106,12 +131,80 @@ def train_model() -> dict:
     return meta
 
 
+def train_model_v2() -> dict:
+    """Train or retrain the SPS prediction model (V2 experiment) using raw split features.
+
+    Returns metadata dict with model_type, n_samples, timestamp, feature_names.
+    """
+    rows = fetch_all(
+        """SELECT cf.*, c.total_sales,
+                  COALESCE(c.creator_type_manual, c.creator_type_auto, 'unknown') AS creator_type
+           FROM creator_features cf
+           JOIN creators c ON c.id = cf.creator_id
+           WHERE c.is_seed = true AND c.total_sales > 0"""
+    )
+    if not rows:
+        raise ValueError("No seed data with features + total_sales found for training")
+
+    X = np.array([_build_feature_vector_v2(r) for r in rows])
+    y = np.log1p(np.array([float(r["total_sales"]) for r in rows]))
+    n_samples = X.shape[0]
+
+    if n_samples < 30:
+        from sklearn.linear_model import Ridge
+        model = Ridge(alpha=1.0)
+        model_type = "Ridge"
+    else:
+        from xgboost import XGBRegressor
+        model = XGBRegressor(
+            n_estimators=50,
+            max_depth=3,
+            learning_rate=0.05,
+            subsample=0.6,
+            colsample_bytree=0.6,
+            reg_alpha=1.0,
+            reg_lambda=2.0,
+            random_state=42,
+        )
+        model_type = "XGBoost"
+
+    model.fit(X, y)
+
+    SPS_MODEL_V2_PATH.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(model, SPS_MODEL_V2_PATH)
+
+    feature_names = FEATURE_COLS_V2 + [f"type_{t}" for t in CREATOR_TYPES]
+    meta = {
+        "model_type": model_type,
+        "n_samples": int(n_samples),
+        "n_features": len(feature_names),
+        "feature_names": feature_names,
+        "target": "total_sales_log1p",
+        "sps_sales_normalizer": SPS_SALES_NORMALIZER,
+        "trained_at": datetime.utcnow().isoformat(),
+        "version": "v2_raw_features",
+    }
+    with open(SPS_MODEL_V2_META_PATH, "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=2)
+
+    logger.info("SPS V2 model trained: %s with %d samples", model_type, n_samples)
+    return meta
+
+
 def load_model():
     """Load trained model from disk. Returns None if not available."""
     if not MODEL_PATH.exists():
         logger.warning("No trained model found at %s", MODEL_PATH)
         return None
     return joblib.load(MODEL_PATH)
+
+
+def load_model_v2():
+    """Load trained SPS V2 model from disk. Returns None if not available."""
+    if not SPS_MODEL_V2_PATH.exists():
+        logger.warning("No SPS V2 model found at %s", SPS_MODEL_V2_PATH)
+        return None
+    return joblib.load(SPS_MODEL_V2_PATH)
 
 
 def sales_to_sps(predicted_sales: float) -> float:
@@ -140,9 +233,29 @@ def predict_sales(features_row: dict) -> float | None:
     return round(sales, 2)
 
 
+def predict_sales_v2(features_row: dict) -> float | None:
+    """Predict raw sales value for a single creator using V2 raw features."""
+    model = load_model_v2()
+    if model is None:
+        return None
+
+    X = _build_feature_vector_v2(features_row).reshape(1, -1)
+    log_pred = model.predict(X)[0]
+    sales = max(0.0, float(np.expm1(log_pred)))
+    return round(sales, 2)
+
+
 def predict_sps(features_row: dict) -> float | None:
     """Predict SPS score (预测销量评分) for a single creator."""
     sales = predict_sales(features_row)
+    if sales is None:
+        return None
+    return sales_to_sps(sales)
+
+
+def predict_sps_v2(features_row: dict) -> float | None:
+    """Predict SPS score for a single creator using V2 raw features."""
+    sales = predict_sales_v2(features_row)
     if sales is None:
         return None
     return sales_to_sps(sales)
@@ -163,8 +276,28 @@ def predict_sales_batch(rows: list[dict]) -> list[float | None]:
     return results
 
 
+def predict_sales_batch_v2(rows: list[dict]) -> list[float | None]:
+    """Predict raw sales values for multiple creators using V2 raw features."""
+    model = load_model_v2()
+    if model is None:
+        return [None] * len(rows)
+
+    X = np.array([_build_feature_vector_v2(r) for r in rows])
+    log_preds = model.predict(X)
+    results: list[float | None] = []
+    for p in log_preds:
+        sales = max(0.0, float(np.expm1(p)))
+        results.append(round(sales, 2))
+    return results
+
+
 def predict_batch(rows: list[dict]) -> list[float | None]:
     """Predict SPS scores for multiple creators (compat wrapper)."""
     sales_batch = predict_sales_batch(rows)
     return [None if s is None else sales_to_sps(s) for s in sales_batch]
-    return results
+
+
+def predict_batch_v2(rows: list[dict]) -> list[float | None]:
+    """Predict SPS scores for multiple creators using V2 raw features."""
+    sales_batch = predict_sales_batch_v2(rows)
+    return [None if s is None else sales_to_sps(s) for s in sales_batch]
