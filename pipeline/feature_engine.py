@@ -208,9 +208,12 @@ def calc_monetization(bio: str, website: str) -> float:
     return 0.0
 
 
-def calc_growth() -> float:
-    """Growth score — requires 30-day historical data; placeholder for v1.0."""
-    return 50.0
+def calc_growth(creator_id: int, is_seed: bool = False) -> float:
+    """Growth score — delegates to growth_monitor."""
+    from pipeline.growth_monitor import calc_growth as _calc
+
+    score, _ = _calc(creator_id, is_seed)
+    return score
 
 
 def calc_character_consistency(tweets: list[dict]) -> float:
@@ -337,7 +340,7 @@ def compute_features_for_creator(creator_id: int) -> dict | None:
         "virality_score": calc_virality(top3_avg, monthly_avg),
         "posting_score": calc_posting(tweets),
         "monetization_score": calc_monetization(bio, website),
-        "growth_score": calc_growth(),
+        "growth_score": calc_growth(creator_id, bool(creator.get("is_seed"))),
         "character_consistency": calc_character_consistency(tweets),
         "community_score": calc_community(tweets),
         "audience_segment_score": audience_segment_score,

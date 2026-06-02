@@ -108,6 +108,31 @@ def store_dataset_items(items: list[dict]) -> dict:
             else:
                 updated += 1
 
+            # 追加 snapshot（同一事务）
+            cur.execute(
+                "SELECT id, is_seed FROM creators WHERE platform_account_id = %s",
+                (username,),
+            )
+            creator_info = cur.fetchone()
+            if creator_info and followers > 0:
+                table = (
+                    "seed_follower_snapshots"
+                    if creator_info.get("is_seed")
+                    else "creator_snapshots"
+                )
+                cur.execute(
+                    f"""
+                    INSERT INTO {table} (creator_id, observed_at, followers, following, tweets_count, source)
+                    VALUES (%s, DATE_TRUNC('day', NOW()), %s, %s, %s, 'intake')
+                    ON CONFLICT (creator_id, observed_at) DO UPDATE SET
+                        followers = EXCLUDED.followers,
+                        following = EXCLUDED.following,
+                        tweets_count = EXCLUDED.tweets_count,
+                        source = EXCLUDED.source
+                    """,
+                    (creator_info["id"], followers, following, tweets_count),
+                )
+
     graph_inserted = _store_graph_relations(relations)
     if graph_inserted:
         logger.info("Inserted %d creator_graph edges", graph_inserted)

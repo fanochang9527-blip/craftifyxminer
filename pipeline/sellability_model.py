@@ -91,9 +91,15 @@ def _load_training_rows() -> tuple[list[dict], list[float]]:
     seen_ids = {int(r["creator_id"]) for r in rows if r.get("creator_id") is not None}
 
     # 你提供的初始样本规则：total_sales < 50 为负样本，> 50 为正样本（=50 不入样本）
+    from pipeline.growth_monitor import is_growth_system_mature
+
+    maturity_filter = ""
+    if is_growth_system_mature():
+        maturity_filter = "AND cf.growth_score IS DISTINCT FROM 50.0"
+
     if len(rows) < 20:
         seed_labeled = fetch_all(
-            """SELECT cf.*, c.id AS creator_id,
+            f"""SELECT cf.*, c.id AS creator_id,
                       COALESCE(c.creator_type_manual, c.creator_type_auto, 'unknown') AS creator_type,
                       CASE
                         WHEN c.total_sales > %s THEN 1
@@ -104,7 +110,8 @@ def _load_training_rows() -> tuple[list[dict], list[float]]:
                JOIN creators c ON c.id = cf.creator_id
                WHERE c.is_seed = true
                  AND c.total_sales IS NOT NULL
-                 AND c.total_sales >= 0""",
+                 AND c.total_sales >= 0
+                 {maturity_filter}""",
             (SELLABILITY_LABEL_SALES_THRESHOLD, SELLABILITY_LABEL_SALES_THRESHOLD),
         )
         for r in seed_labeled:

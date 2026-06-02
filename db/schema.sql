@@ -221,3 +221,36 @@ CREATE TABLE IF NOT EXISTS bd_decisions (
 CREATE INDEX IF NOT EXISTS idx_bd_decisions_creator ON bd_decisions (creator_id);
 CREATE INDEX IF NOT EXISTS idx_bd_decisions_user ON bd_decisions (user_id);
 CREATE INDEX IF NOT EXISTS idx_bd_decisions_decision ON bd_decisions (decision);
+
+-- 14. Growth Score — 粉丝历史快照
+ALTER TABLE creators ADD COLUMN IF NOT EXISTS last_follower_refresh_at TIMESTAMP;
+CREATE INDEX IF NOT EXISTS idx_creators_last_refresh ON creators (last_follower_refresh_at);
+
+-- 普通创作者粉丝历史快照
+CREATE TABLE IF NOT EXISTS creator_snapshots (
+    id SERIAL PRIMARY KEY,
+    creator_id INTEGER REFERENCES creators(id) ON DELETE CASCADE,
+    observed_at TIMESTAMP DEFAULT NOW(),
+    followers INTEGER,
+    following INTEGER,
+    tweets_count INTEGER,
+    source VARCHAR(20),
+    anomaly_type VARCHAR(20),
+    anomaly_note TEXT,
+    UNIQUE(creator_id, observed_at)
+);
+CREATE INDEX IF NOT EXISTS idx_snapshots_creator_time ON creator_snapshots (creator_id, observed_at DESC);
+
+-- 种子用户专属粉丝历史快照
+CREATE TABLE IF NOT EXISTS seed_follower_snapshots (
+    id SERIAL PRIMARY KEY,
+    creator_id INTEGER REFERENCES creators(id) ON DELETE CASCADE,
+    observed_at TIMESTAMP DEFAULT NOW(),
+    followers INTEGER,
+    following INTEGER,
+    tweets_count INTEGER,
+    source VARCHAR(20),
+    batch_tag TEXT,
+    UNIQUE(creator_id, observed_at)
+);
+CREATE INDEX IF NOT EXISTS idx_seed_snapshots_creator_time ON seed_follower_snapshots (creator_id, observed_at DESC);

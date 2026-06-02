@@ -78,6 +78,34 @@ def job_daily_summary():
     logger.info("Seeds promoted: %d", promoted)
 
 
+@scheduler.scheduled_job("cron", hour=6, minute=0, id="follower_refresh", misfire_grace_time=3600)
+def job_follower_refresh():
+    """Periodic follower refresh for seeds and interested creators (every 3 days per creator)."""
+    logger.info("=== Job: follower_refresh ===")
+    from pipeline.follower_refresh import run_follower_refresh
+
+    result = run_follower_refresh()
+    logger.info(
+        "Follower refresh finished: %d candidates, %d updated",
+        result.get("candidates", 0),
+        result.get("updated", 0),
+    )
+
+
+@scheduler.scheduled_job("cron", hour=11, minute=0, id="growth_monitor", misfire_grace_time=3600)
+def job_growth_monitor():
+    """Graduate placeholder growth scores to real values after 30 days of history."""
+    logger.info("=== Job: growth_monitor ===")
+    from pipeline.growth_monitor import refresh_growth_scores
+
+    result = refresh_growth_scores()
+    logger.info(
+        "Growth refresh finished: %d checked, %d graduated",
+        result.get("checked", 0),
+        result.get("graduated", 0),
+    )
+
+
 def main():
     logger.info("CraftifyX Miner cron scheduler starting...")
     try:
