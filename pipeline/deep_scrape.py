@@ -100,6 +100,35 @@ def _store_deep_scrape_results(items: list[dict]) -> dict:
             creator_id = row["id"]
             profiles_updated += 1
 
+            # 追加：记录 snapshot（同一事务）
+            cur.execute(
+                "SELECT is_seed FROM creators WHERE id = %s",
+                (creator_id,),
+            )
+            is_seed_row = cur.fetchone()
+            is_seed = is_seed_row and is_seed_row.get("is_seed")
+            table = "seed_follower_snapshots" if is_seed else "creator_snapshots"
+            author_tweets_count = (
+                author.get("statusesCount") or author.get("tweetsCount") or 0
+            )
+            cur.execute(
+                f"""
+                INSERT INTO {table} (creator_id, observed_at, followers, following, tweets_count, source)
+                VALUES (%s, DATE_TRUNC('day', NOW()), %s, %s, %s, 'deep_scrape')
+                ON CONFLICT (creator_id, observed_at) DO UPDATE SET
+                    followers = EXCLUDED.followers,
+                    following = EXCLUDED.following,
+                    tweets_count = EXCLUDED.tweets_count,
+                    source = EXCLUDED.source
+                """,
+                (
+                    creator_id,
+                    author.get("followers") or author.get("followersCount") or 0,
+                    author.get("following") or author.get("friendsCount") or 0,
+                    author_tweets_count,
+                ),
+            )
+
         for tw in tweets:
             tweet_id = str(tw.get("id") or tw.get("id_str") or "")
             if not tweet_id:

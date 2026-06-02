@@ -68,12 +68,19 @@ def _build_feature_vector_v2(row: dict) -> np.ndarray:
 
 def _load_training_data() -> tuple[np.ndarray, np.ndarray]:
     """Load seed creators with features + total_sales as (X, y)."""
+    from pipeline.growth_monitor import is_growth_system_mature
+
+    maturity_filter = ""
+    if is_growth_system_mature():
+        maturity_filter = "AND cf.growth_score IS DISTINCT FROM 50.0"
+
     rows = fetch_all(
-        """SELECT cf.*, c.total_sales,
+        f"""SELECT cf.*, c.total_sales,
                   COALESCE(c.creator_type_manual, c.creator_type_auto, 'unknown') AS creator_type
            FROM creator_features cf
            JOIN creators c ON c.id = cf.creator_id
-           WHERE c.is_seed = true AND c.total_sales > 0"""
+           WHERE c.is_seed = true AND c.total_sales > 0
+             {maturity_filter}"""
     )
     if not rows:
         raise ValueError("No seed data with features + total_sales found for training")

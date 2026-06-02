@@ -208,12 +208,19 @@ def score_creator(creator_id: int) -> dict | None:
 
 def score_all_pending() -> int:
     """Score all creators that have features but no SPS score yet."""
+    from pipeline.growth_monitor import is_growth_system_mature
+
+    maturity_filter = ""
+    if is_growth_system_mature():
+        maturity_filter = "AND cf.growth_score IS DISTINCT FROM 50.0"
+
     rows = fetch_all(
-        """SELECT cf.creator_id FROM creator_features cf
+        f"""SELECT cf.creator_id FROM creator_features cf
            LEFT JOIN creator_scores cs ON cs.creator_id = cf.creator_id
-           WHERE cs.id IS NULL
+           WHERE (cs.id IS NULL
               OR cs.sellability_score IS NULL
-              OR cs.predicted_sales IS NULL"""
+              OR cs.predicted_sales IS NULL)
+             {maturity_filter}"""
     )
     count = 0
     for row in rows:

@@ -119,3 +119,10 @@ NON_SELLABLE_SPS_WEIGHT = float(os.getenv("NON_SELLABLE_SPS_WEIGHT", "0.35"))
 # content_creator = YouTube/TikTok 网红（非绘画类）    (当前种子数据无此类型)
 # unknown         = 无法判断
 CREATOR_TYPES = ("oc_creator", "vtuber", "fan_artist", "game_creator", "content_creator", "unknown")
+
+# --- Growth Score ---
+GROWTH_SPAN_MIN_DAYS = int(os.getenv("GROWTH_SPAN_MIN_DAYS", "30"))
+GROWTH_ANOMALY_DROP_THRESHOLD = float(os.getenv("GROWTH_ANOMALY_DROP_THRESHOLD", "-0.80"))
+GROWTH_ANOMALY_MIN_FOLLOWERS = int(os.getenv("GROWTH_ANOMALY_MIN_FOLLOWERS", "1000"))
+FOLLOWER_REFRESH_INTERVAL_DAYS = int(os.getenv("FOLLOWER_REFRESH_INTERVAL_DAYS", "3"))
+FOLLOWER_REFRESH_BATCH_SIZE = int(os.getenv("FOLLOWER_REFRESH_BATCH_SIZE", "100"))

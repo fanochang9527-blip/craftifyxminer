@@ -169,7 +169,7 @@ def import_seeds(path: str, *, skip_post_pipeline: bool = False) -> dict:
                        discovery_strategy = 'csv_import',
                        bio = COALESCE(NULLIF(EXCLUDED.bio, ''), creators.bio),
                        website = COALESCE(NULLIF(EXCLUDED.website, ''), creators.website)
-                   RETURNING (xmax = 0) AS is_insert""",
+                   RETURNING id, (xmax = 0) AS is_insert""",
                 (
                     username,
                     bio,
@@ -187,10 +187,29 @@ def import_seeds(path: str, *, skip_post_pipeline: bool = False) -> dict:
                 ),
             )
             result = cur.fetchone()
+            creator_id = result["id"] if result else None
             if result and result["is_insert"]:
                 inserted += 1
             else:
                 updated += 1
+
+            # 追加 snapshot（同一事务）
+            if creator_id and int(str(row.get("followers", 0) or 0).replace(",", "")) > 0:
+                followers = int(str(row.get("followers", 0) or 0).replace(",", ""))
+                following = int(str(row.get("following", 0) or 0).replace(",", ""))
+                tweets_count = int(str(row.get("tweets_count", 0) or 0).replace(",", ""))
+                cur.execute(
+                    """
+                    INSERT INTO seed_follower_snapshots (creator_id, observed_at, followers, following, tweets_count, source)
+                    VALUES (%s, DATE_TRUNC('day', NOW()), %s, %s, %s, 'seed_import')
+                    ON CONFLICT (creator_id, observed_at) DO UPDATE SET
+                        followers = EXCLUDED.followers,
+                        following = EXCLUDED.following,
+                        tweets_count = EXCLUDED.tweets_count,
+                        source = EXCLUDED.source
+                    """,
+                    (creator_id, followers, following, tweets_count),
+                )
 
     suggestions = _generate_bio_rule_suggestions(df)
 
