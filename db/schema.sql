@@ -226,6 +226,31 @@ CREATE INDEX IF NOT EXISTS idx_bd_decisions_decision ON bd_decisions (decision);
 ALTER TABLE creators ADD COLUMN IF NOT EXISTS last_follower_refresh_at TIMESTAMP;
 CREATE INDEX IF NOT EXISTS idx_creators_last_refresh ON creators (last_follower_refresh_at);
 
+-- 15. 粉丝量急剧下降预警（独立表，不扩展 creators）
+CREATE TABLE IF NOT EXISTS follower_alerts (
+    id SERIAL PRIMARY KEY,
+    creator_id INTEGER REFERENCES creators(id) ON DELETE CASCADE,
+    alerted_at TIMESTAMP DEFAULT NOW(),
+    alert_note TEXT,
+    UNIQUE(creator_id)
+);
+CREATE INDEX IF NOT EXISTS idx_follower_alerts_creator ON follower_alerts (creator_id);
+CREATE INDEX IF NOT EXISTS idx_follower_alerts_alerted_at ON follower_alerts (alerted_at);
+
+-- 16. 种子粉丝量大幅增长提醒（发现高潜力种子，用于二次合作）
+CREATE TABLE IF NOT EXISTS seed_growth_alerts (
+    id SERIAL PRIMARY KEY,
+    creator_id INTEGER REFERENCES creators(id) ON DELETE CASCADE,
+    alerted_at TIMESTAMP DEFAULT NOW(),
+    alert_note TEXT,
+    previous_followers INTEGER,
+    current_followers INTEGER,
+    growth_rate FLOAT,
+    UNIQUE(creator_id)
+);
+CREATE INDEX IF NOT EXISTS idx_seed_growth_alerts_creator ON seed_growth_alerts (creator_id);
+CREATE INDEX IF NOT EXISTS idx_seed_growth_alerts_alerted_at ON seed_growth_alerts (alerted_at);
+
 -- 普通创作者粉丝历史快照
 CREATE TABLE IF NOT EXISTS creator_snapshots (
     id SERIAL PRIMARY KEY,
