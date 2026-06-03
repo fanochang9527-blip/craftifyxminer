@@ -132,6 +132,17 @@ def calc_contact_probability(sps: float, monetization: float) -> float:
 
 def score_creator(creator_id: int) -> dict | None:
     """Compute SPS, centrality, and contact probability for one creator."""
+    # 若已触发粉丝量急剧下降预警，跳过评分
+    alert_row = fetch_one(
+        "SELECT alerted_at FROM follower_alerts WHERE creator_id = %s",
+        (creator_id,),
+    )
+    if alert_row and alert_row.get("alerted_at"):
+        logger.warning(
+            "Skipping score for creator_id=%s due to follower drop alert", creator_id
+        )
+        return None
+
     features = fetch_one(
         "SELECT * FROM creator_features WHERE creator_id = %s",
         (creator_id,),
@@ -217,7 +228,9 @@ def score_all_pending() -> int:
     rows = fetch_all(
         f"""SELECT cf.creator_id FROM creator_features cf
            LEFT JOIN creator_scores cs ON cs.creator_id = cf.creator_id
-           WHERE (cs.id IS NULL
+           LEFT JOIN follower_alerts fa ON fa.creator_id = cf.creator_id
+           WHERE fa.creator_id IS NULL
+             AND (cs.id IS NULL
               OR cs.sellability_score IS NULL
               OR cs.predicted_sales IS NULL)
              {maturity_filter}"""

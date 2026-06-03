@@ -8,6 +8,10 @@ from config.settings import (
     GROWTH_SPAN_MIN_DAYS,
     GROWTH_ANOMALY_DROP_THRESHOLD,
     GROWTH_ANOMALY_MIN_FOLLOWERS,
+    FOLLOWER_DROP_ALERT_THRESHOLD,
+    FOLLOWER_DROP_MIN_FOLLOWERS,
+    SEED_GROWTH_ALERT_THRESHOLD,
+    SEED_GROWTH_MIN_FOLLOWERS,
 )
 
 logger = logging.getLogger(__name__)
@@ -38,6 +42,11 @@ def record_snapshot(
             """,
             (creator_id, followers, following, tweets_count, source),
         )
+    # 对普通创作者检测粉丝量急剧下降
+    if not is_seed:
+        check_follower_drop_alert(creator_id, followers)
+    # 对种子（SPS seed + BD interested）检测粉丝量大幅增长
+    check_seed_growth_alert(creator_id, followers, is_seed)
 
 
 def calc_growth(creator_id: int, is_seed: bool = False) -> tuple[float, bool]:
@@ -177,6 +186,144 @@ def refresh_growth_scores() -> dict:
     return {"checked": checked, "graduated": graduated}
 
 
+def check_follower_drop_alert(creator_id: int, current_followers: int) -> bool:
+    """Check if a creator's followers dropped sharply between the two most recent snapshots.
+
+    Only applies to project-discovered, filtered creators:
+    - bd_status IN ('rule_passed', 'ai_passed')
+    - NOT is_seed
+    - NOT bd_decision = 'interested'
+
+    If triggered, inserts into follower_alerts and logs a warning.
+    Returns True if alert was triggered.
+    """
+    creator = fetch_one(
+        """SELECT is_seed, bd_status, bd_decision, username
+           FROM creators WHERE id = %s""",
+        (creator_id,),
+    )
+    if not creator:
+        return False
+
+    # 只针对"由项目发现的、通过了过滤的"创作者（非种子、非 BD interested）
+    if bool(creator.get("is_seed")):
+        return False
+    if creator.get("bd_decision") == "interested":
+        return False
+    if creator.get("bd_status") not in ("rule_passed", "ai_passed"):
+        return False
+
+    # 查询上一条 snapshot（排除当天，避免与刚写入的行比较）
+    prev = fetch_one(
+        """SELECT followers
+           FROM creator_snapshots
+           WHERE creator_id = %s AND observed_at < DATE_TRUNC('day', NOW())
+           ORDER BY observed_at DESC
+           LIMIT 1""",
+        (creator_id,),
+    )
+    if not prev or prev.get("followers") is None:
+        return False
+
+    prev_followers = prev["followers"]
+    if prev_followers < FOLLOWER_DROP_MIN_FOLLOWERS:
+        return False
+    if prev_followers == 0:
+        return False
+
+    drop_rate = (current_followers - prev_followers) / prev_followers
+    if drop_rate > FOLLOWER_DROP_ALERT_THRESHOLD:
+        return False
+
+    # 触发预警（幂等：ON CONFLICT DO NOTHING）
+    note = f"followers dropped {drop_rate:.1%} from {prev_followers} to {current_followers}"
+    with get_cursor() as cur:
+        cur.execute(
+            """INSERT INTO follower_alerts (creator_id, alerted_at, alert_note)
+               VALUES (%s, NOW(), %s)
+               ON CONFLICT (creator_id) DO NOTHING""",
+            (creator_id, note),
+        )
+
+    logger.warning(
+        "FOLLOWER_DROP_ALERT: creator_id=%s username=%s %s",
+        creator_id,
+        creator.get("username") or "unknown",
+        note,
+    )
+    return True
+
+
+def check_seed_growth_alert(creator_id: int, current_followers: int, is_seed: bool = False) -> bool:
+    """Check if a seed or BD-interested creator's followers grew sharply.
+
+    Targets:
+    - is_seed = true (SPS model seeds from seed_file.csv)
+    - bd_decision = 'interested' (Sellability model seeds)
+
+    If triggered, inserts into seed_growth_alerts and logs an info message
+    for follow-up / secondary collaboration opportunities.
+    Returns True if alert was triggered.
+    """
+    creator = fetch_one(
+        "SELECT is_seed, bd_decision, username FROM creators WHERE id = %s",
+        (creator_id,),
+    )
+    if not creator:
+        return False
+
+    # 只针对种子（SPS seed + BD interested）
+    if not (bool(creator.get("is_seed")) or creator.get("bd_decision") == "interested"):
+        return False
+
+    # 查询上一条 snapshot（根据 is_seed 选择表）
+    table = "seed_follower_snapshots" if is_seed else "creator_snapshots"
+    prev = fetch_one(
+        f"""SELECT followers
+            FROM {table}
+            WHERE creator_id = %s AND observed_at < DATE_TRUNC('day', NOW())
+            ORDER BY observed_at DESC
+            LIMIT 1""",
+        (creator_id,),
+    )
+    if not prev or prev.get("followers") is None:
+        return False
+
+    prev_followers = prev["followers"]
+    if prev_followers < SEED_GROWTH_MIN_FOLLOWERS:
+        return False
+    if prev_followers == 0:
+        return False
+
+    growth_rate = (current_followers - prev_followers) / prev_followers
+    if growth_rate < SEED_GROWTH_ALERT_THRESHOLD:
+        return False
+
+    # 触发提醒（已存在则更新，保持最新）
+    note = f"followers grew {growth_rate:.1%} from {prev_followers} to {current_followers}"
+    with get_cursor() as cur:
+        cur.execute(
+            """INSERT INTO seed_growth_alerts
+                   (creator_id, alerted_at, alert_note, previous_followers, current_followers, growth_rate)
+               VALUES (%s, NOW(), %s, %s, %s, %s)
+               ON CONFLICT (creator_id) DO UPDATE SET
+                   alerted_at = EXCLUDED.alerted_at,
+                   alert_note = EXCLUDED.alert_note,
+                   previous_followers = EXCLUDED.previous_followers,
+                   current_followers = EXCLUDED.current_followers,
+                   growth_rate = EXCLUDED.growth_rate""",
+            (creator_id, note, prev_followers, current_followers, growth_rate),
+        )
+
+    logger.info(
+        "SEED_GROWTH_ALERT: creator_id=%s username=%s %s",
+        creator_id,
+        creator.get("username") or "unknown",
+        note,
+    )
+    return True
+
+
 def _update_growth_and_infer(
     creator_id: int,
     score: float,
@@ -184,6 +331,17 @@ def _update_growth_and_infer(
     predict_sps,
 ) -> None:
     """Update growth_score in creator_features and rerun inference for one creator."""
+    # 若已触发粉丝量急剧下降预警，不再投入模型推理
+    alert_row = fetch_one(
+        "SELECT alerted_at FROM follower_alerts WHERE creator_id = %s",
+        (creator_id,),
+    )
+    if alert_row and alert_row.get("alerted_at"):
+        logger.warning(
+            "Skipping inference for creator_id=%s due to follower drop alert", creator_id
+        )
+        return
+
     with get_cursor() as cur:
         cur.execute(
             """

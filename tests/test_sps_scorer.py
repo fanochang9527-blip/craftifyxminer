@@ -95,3 +95,49 @@ class TestContactProbability:
 class TestKeyAlignment:
     def test_same_length(self):
         assert len(FEATURE_KEYS) == len(WEIGHT_KEYS) == 9
+
+
+# ---------------------------------------------------------------------------
+# Tests — score_creator skips alerted creators
+# ---------------------------------------------------------------------------
+
+class TestScoreCreatorAlertSkip:
+    @patch("pipeline.sps_scorer.fetch_one")
+    def test_skips_alerted_creator(self, mock_fetch_one):
+        from pipeline.sps_scorer import score_creator
+
+        # first call: alerted_at check
+        mock_fetch_one.return_value = {"alerted_at": "2024-01-01T00:00:00"}
+        result = score_creator(1)
+        assert result is None
+
+    @patch("pipeline.sps_scorer.fetch_one")
+    def test_scores_non_alerted_creator(self, mock_fetch_one):
+        from pipeline.sps_scorer import score_creator
+        from unittest.mock import patch
+
+        # first call: follower_alert_at check → None
+        # subsequent calls: features, type, seed_connections
+        mock_fetch_one.side_effect = [
+            {"follower_alert_at": None},
+            {
+                "audience_score": 50.0,
+                "engagement_score": 50.0,
+                "virality_score": 50.0,
+                "posting_score": 50.0,
+                "monetization_score": 50.0,
+                "growth_score": 50.0,
+                "character_consistency": 50.0,
+                "community_score": 50.0,
+                "audience_segment_score": 50.0,
+            },
+            {"creator_type": "content_creator"},
+            {"cnt": 0},
+        ]
+        with patch("pipeline.sps_scorer.get_cursor") as mock_get_cursor:
+            mock_cursor = MagicMock()
+            mock_get_cursor.return_value.__enter__ = lambda self: mock_cursor
+            mock_get_cursor.return_value.__exit__ = lambda self, *args: False
+            result = score_creator(1)
+            assert result is not None
+            assert result["creator_id"] == 1
