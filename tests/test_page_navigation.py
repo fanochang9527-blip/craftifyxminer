@@ -30,7 +30,7 @@ class TestCandidatesPageSource:
     """Verify jump controls are present in the candidates page source."""
 
     def test_jump_controls_present(self):
-        path = Path(__file__).resolve().parent.parent / "dashboard" / "pages" / "2_candidates.py"
+        path = Path(__file__).resolve().parent.parent / "dashboard" / "page_modules" / "2_candidates.py"
         source = path.read_text(encoding="utf-8")
         assert "jump_page" in source
         assert "jump_input_" in source

@@ -22,16 +22,16 @@ if not user:
     st.stop()
 
 pages = [
-    st.Page("pages/0_home.py", title=t("nav.home"), icon="🏠"),
-    st.Page("pages/1_daily_report.py", title=t("nav.daily_report"), icon="📊"),
-    st.Page("pages/2_candidates.py", title=t("nav.candidates"), icon="👤"),
-    st.Page("pages/3_outreach.py", title=t("nav.outreach"), icon="📞"),
-    st.Page("pages/4_cost_monitor.py", title=t("nav.cost_monitor"), icon="💸"),
-    st.Page("pages/6_seeds.py", title=t("nav.seeds"), icon="🌱"),
+    st.Page("page_modules/0_home.py", title=t("nav.home"), icon="🏠"),
+    st.Page("page_modules/1_daily_report.py", title=t("nav.daily_report"), icon="📊"),
+    st.Page("page_modules/2_candidates.py", title=t("nav.candidates"), icon="👤"),
+    st.Page("page_modules/3_outreach.py", title=t("nav.outreach"), icon="📞"),
+    st.Page("page_modules/4_cost_monitor.py", title=t("nav.cost_monitor"), icon="💸"),
+    st.Page("page_modules/6_seeds.py", title=t("nav.seeds"), icon="🌱"),
 ]
 
 if user.get("role") == "admin":
-    pages.append(st.Page("pages/5_admin.py", title=t("nav.admin"), icon="⚙️"))
+    pages.append(st.Page("page_modules/5_admin.py", title=t("nav.admin"), icon="⚙️"))
 
 pg = st.navigation(pages)
 
