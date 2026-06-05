@@ -1,14 +1,15 @@
-"""Full pipeline runner — 8 步日常流水线。
+"""Full pipeline runner — 9 步日常流水线。
 
 步骤:
   1. Generate anchors (全量种子)
   2. L1 scan (Apify following)
   3. Deep scrape
-  4. Type classification
-  5. Feature computation
-  6. Backfill creator_graph & centrality
-  7. SPS prediction
-  8. Model evaluation
+  4. Content style filter (multimodal)
+  5. Type classification
+  6. Feature computation
+  7. Backfill creator_graph & centrality
+  8. SPS prediction
+  9. Model evaluation
 """
 
 from __future__ import annotations
@@ -64,11 +65,12 @@ def run_full_pipeline(
     anchors: list[dict] | None = None,
     deep_limit: int | None = None,
 ) -> dict:
-    """Execute the full daily 8-step pipeline.
+    """Execute the full daily 9-step pipeline.
 
     Returns a summary dict of all step results.
     """
     from pipeline.backfill import run_backfill
+    from pipeline.content_style_filter import filter_all_pending as _filter_content_style
     from pipeline.deep_scrape import trigger_deep_scrape_batch
     from pipeline.discovery import generate_daily_seeds, trigger_l1_scan
     from pipeline.feature_engine import compute_all_pending
@@ -80,6 +82,7 @@ def run_full_pipeline(
         "Generate anchors (all seeds)",
         "L1 scan (Apify following)",
         "Deep scrape",
+        "Content style filter (multimodal)",
         "Type classification",
         "Feature computation",
         "Backfill creator_graph & centrality",
@@ -93,7 +96,7 @@ def run_full_pipeline(
     start_ts = _ts()
 
     print(_SEP)
-    print(f" CraftifyX Miner — Daily Pipeline (8-step)")
+    print(f" CraftifyX Miner — Daily Pipeline (9-step)")
     print(f" Date: {start_ts}")
     print(_SEP)
     print(" Tasks:")
@@ -108,6 +111,7 @@ def run_full_pipeline(
         "l1": {},
         "deep_scrape": {},
         "classified": 0,
+        "content_style": {},
         "features": 0,
         "backfill": {},
         "scores": 0,
@@ -154,24 +158,37 @@ def run_full_pipeline(
     if st.failed:
         summary["errors"].append(("deep_scrape", st.result_line))
 
-    # Step 4: Type classification
+    # Step 4: Content style filter (multimodal)
     with _StepTimer(4, total, steps[3]) as st:
+        style_result = _filter_content_style()
+        st.result_line = (
+            f"{style_result.get('analyzed', 0)} analyzed, "
+            f"{style_result.get('passed', 0)} passed, "
+            f"{style_result.get('rejected', 0)} rejected, "
+            f"{style_result.get('skipped', 0)} skipped"
+        )
+        summary["content_style"] = style_result
+    if st.failed:
+        summary["errors"].append(("content_style", st.result_line))
+
+    # Step 5: Type classification
+    with _StepTimer(5, total, steps[4]) as st:
         classified = classify_all_pending()
         st.result_line = f"{classified} creators classified"
         summary["classified"] = classified
     if st.failed:
         summary["errors"].append(("classification", st.result_line))
 
-    # Step 5: Features
-    with _StepTimer(5, total, steps[4]) as st:
+    # Step 6: Features
+    with _StepTimer(6, total, steps[5]) as st:
         feat = compute_all_pending()
         st.result_line = f"{feat} creators computed"
         summary["features"] = feat
     if st.failed:
         summary["errors"].append(("features", st.result_line))
 
-    # Step 6: Backfill creator_graph & centrality
-    with _StepTimer(6, total, steps[5]) as st:
+    # Step 7: Backfill creator_graph & centrality
+    with _StepTimer(7, total, steps[6]) as st:
         backfill_result = run_backfill()
         st.result_line = (
             f"inserted {backfill_result.get('relations_inserted', 0)} graph edges, "
@@ -181,16 +198,16 @@ def run_full_pipeline(
     if st.failed:
         summary["errors"].append(("backfill", st.result_line))
 
-    # Step 7: SPS prediction
-    with _StepTimer(7, total, steps[6]) as st:
+    # Step 8: SPS prediction
+    with _StepTimer(8, total, steps[7]) as st:
         scores = score_all_pending()
         st.result_line = f"{scores} creators scored"
         summary["scores"] = scores
     if st.failed:
         summary["errors"].append(("scores", st.result_line))
 
-    # Step 8: Model evaluation
-    with _StepTimer(8, total, steps[7]) as st:
+    # Step 9: Model evaluation
+    with _StepTimer(9, total, steps[8]) as st:
         eval_results = evaluate_model()
         sell_result = next((r for r in eval_results if r.get("model_name") == "sellability"), {})
         sps_result = next((r for r in eval_results if r.get("model_name") == "sps"), {})
@@ -201,8 +218,8 @@ def run_full_pipeline(
     if st.failed:
         summary["errors"].append(("evaluation", st.result_line))
 
-    # Step 9: Train sellability model
-    with _StepTimer(9, total, steps[8]) as st:
+    # Step 10: Train sellability model
+    with _StepTimer(10, total, steps[9]) as st:
         from pipeline.sellability_model import train_model as _train_sellability
         train_meta = _train_sellability()
         st.result_line = f"{train_meta['model_type']} ({train_meta['n_samples']} samples)"
@@ -210,8 +227,8 @@ def run_full_pipeline(
     if st.failed:
         summary["errors"].append(("sellability_training", st.result_line))
 
-    # Step 10: Train SPS model
-    with _StepTimer(10, total, steps[9]) as st:
+    # Step 11: Train SPS model
+    with _StepTimer(11, total, steps[10]) as st:
         from pipeline.sps_model import train_model as _train_sps
         train_meta = _train_sps()
         st.result_line = f"{train_meta['model_type']} ({train_meta['n_samples']} samples)"
@@ -238,6 +255,11 @@ def run_full_pipeline(
           f"(passed {l1_filter.get('rule_passed', 0)}+{l1_filter.get('ai_passed', 0)}, "
           f"rejected {l1_filter.get('rule_rejected', 0)}+{l1_filter.get('ai_rejected', 0)})")
     print(f" Deep scraped:        {ds_data.get('candidates', 0)}")
+    cs_data = summary.get("content_style", {})
+    if cs_data:
+        print(f" Content style:       {cs_data.get('analyzed', 0)} analyzed, "
+              f"{cs_data.get('passed', 0)} passed, "
+              f"{cs_data.get('rejected', 0)} rejected")
     print(f" Type classified:     {summary['classified']}")
     print(f" Features computed:   {summary['features']}")
     backfill_data = summary.get("backfill", {})

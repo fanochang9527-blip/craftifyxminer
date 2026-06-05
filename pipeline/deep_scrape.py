@@ -134,18 +134,21 @@ def _store_deep_scrape_results(items: list[dict]) -> dict:
             if not tweet_id:
                 continue
 
-            media: list[str] = []
+            media_urls: list[str] = []
+            media_types: list[str] = []
             for m in tw.get("extendedEntities", {}).get("media", []):
                 url = m.get("media_url_https") or m.get("media_url") or ""
+                mtype = m.get("type", "photo")
                 if url:
-                    media.append(url)
+                    media_urls.append(url)
+                    media_types.append(mtype)
 
             with get_cursor() as cur:
                 cur.execute(
                     """INSERT INTO tweets
                            (tweet_id, creator_id, likes, retweets, replies, views,
-                            created_at, text, media_urls)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            created_at, text, media_urls, media_types)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                        ON CONFLICT (tweet_id) DO NOTHING""",
                     (
                         tweet_id,
@@ -156,7 +159,8 @@ def _store_deep_scrape_results(items: list[dict]) -> dict:
                         tw.get("viewCount") or tw.get("views") or 0,
                         tw.get("createdAt") or tw.get("created_at"),
                         tw.get("text") or tw.get("full_text") or "",
-                        media or [],
+                        media_urls or [],
+                        media_types or [],
                     ),
                 )
                 tweets_inserted += 1
