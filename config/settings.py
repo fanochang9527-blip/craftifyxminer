@@ -127,6 +127,27 @@ GROWTH_ANOMALY_MIN_FOLLOWERS = int(os.getenv("GROWTH_ANOMALY_MIN_FOLLOWERS", "10
 FOLLOWER_REFRESH_INTERVAL_DAYS = int(os.getenv("FOLLOWER_REFRESH_INTERVAL_DAYS", "3"))
 FOLLOWER_REFRESH_BATCH_SIZE = int(os.getenv("FOLLOWER_REFRESH_BATCH_SIZE", "100"))
 
+# --- 备选: Mimo (Anthropic 原生格式) ---
+MIMO_API_KEY = os.getenv("MIMO_API_KEY", "")
+MIMO_BASE_URL = os.getenv("MIMO_BASE_URL", "https://token-plan-cn.xiaomimimo.com/anthropic")
+MIMO_MODEL = os.getenv("MIMO_MODEL", "mimo-v2.5")
+
+# --- 多模态内容风格过滤 (支持 AB 测试切换模型) ---
+CONTENT_STYLE_ENABLED = os.getenv("CONTENT_STYLE_ENABLED", "true").lower() in ("1", "true", "yes")
+CONTENT_STYLE_LLM_PROVIDER = os.getenv("CONTENT_STYLE_LLM_PROVIDER", LLM_PROVIDER)
+CONTENT_STYLE_LLM_MODEL = os.getenv("CONTENT_STYLE_LLM_MODEL", LLM_MODEL)
+CONTENT_STYLE_MAX_MEDIA_PER_CREATOR = int(os.getenv("CONTENT_STYLE_MAX_MEDIA_PER_CREATOR", "5"))
+CONTENT_STYLE_MAX_TWEETS_PER_CREATOR = int(os.getenv("CONTENT_STYLE_MAX_TWEETS_PER_CREATOR", "10"))
+CONTENT_STYLE_CONFIDENCE_THRESHOLD = float(os.getenv("CONTENT_STYLE_CONFIDENCE_THRESHOLD", "0.7"))
+CONTENT_STYLE_BATCH_SIZE = int(os.getenv("CONTENT_STYLE_BATCH_SIZE", "5"))
+# 内容风格过滤可独立配置 fallback chain；未配置则复用全局 FALLBACK_CHAIN
+_content_style_fallback_raw = os.getenv("CONTENT_STYLE_FALLBACK_CHAIN", "").strip()
+CONTENT_STYLE_FALLBACK_CHAIN = (
+    [p.strip() for p in _content_style_fallback_raw.split(",") if p.strip()]
+    if _content_style_fallback_raw
+    else list(FALLBACK_CHAIN)
+)
+
 # --- 粉丝量急剧下降预警 ---
 FOLLOWER_DROP_ALERT_THRESHOLD = float(os.getenv("FOLLOWER_DROP_ALERT_THRESHOLD", "-0.20"))
 FOLLOWER_DROP_MIN_FOLLOWERS = int(os.getenv("FOLLOWER_DROP_MIN_FOLLOWERS", "20000"))

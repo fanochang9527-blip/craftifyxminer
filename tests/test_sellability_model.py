@@ -19,7 +19,8 @@ from pipeline.sellability_model import (
 
 
 class TestLoadTrainingRows:
-    def test_raises_when_no_data(self):
+    @patch("pipeline.growth_monitor.is_growth_system_mature", return_value=False)
+    def test_raises_when_no_data(self, _mock_mature):
         with patch("pipeline.sellability_model.fetch_all", return_value=[]):
             try:
                 _load_training_rows()
@@ -27,14 +28,16 @@ class TestLoadTrainingRows:
             except ValueError as e:
                 assert "No training data" in str(e)
 
-    def test_uses_reviewed_rows_first(self):
+    @patch("pipeline.growth_monitor.is_growth_system_mature", return_value=False)
+    def test_uses_reviewed_rows_first(self, _mock_mature):
         reviewed = [{"y": 1, "audience_score": 1.0, "creator_type": "unknown", "creator_id": 1}]
         with patch("pipeline.sellability_model.fetch_all", side_effect=[reviewed, [], []]):
             rows, weights = _load_training_rows()
             assert len(rows) == 1
             assert weights == [1.0]
 
-    def test_seed_sales_threshold_labels(self):
+    @patch("pipeline.growth_monitor.is_growth_system_mature", return_value=False)
+    def test_seed_sales_threshold_labels(self, _mock_mature):
         reviewed = []
         seed_rows = [
             {"creator_id": 11, "y": 1, "creator_type": "unknown"},
