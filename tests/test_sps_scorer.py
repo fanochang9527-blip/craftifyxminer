@@ -37,13 +37,12 @@ class TestGetWeights:
     def test_known_type(self):
         w = get_weights_for_type("oc_creator")
         assert "audience" in w
-        assert "character_consistency" in w
         assert abs(sum(w.values()) - 1.0) < 0.01
 
     def test_unknown_falls_back(self):
         w = get_weights_for_type("totally_unknown_type")
         assert isinstance(w, dict)
-        assert len(w) >= 9
+        assert len(w) >= 8
 
     def test_all_types_sum_to_one(self):
         for ctype in ["oc_creator", "vtuber", "fan_artist", "game_creator", "content_creator"]:
@@ -94,7 +93,7 @@ class TestContactProbability:
 
 class TestKeyAlignment:
     def test_same_length(self):
-        assert len(FEATURE_KEYS) == len(WEIGHT_KEYS) == 9
+        assert len(FEATURE_KEYS) == len(WEIGHT_KEYS) == 8
 
 
 # ---------------------------------------------------------------------------
@@ -127,7 +126,6 @@ class TestScoreCreatorAlertSkip:
                 "posting_score": 50.0,
                 "monetization_score": 50.0,
                 "growth_score": 50.0,
-                "character_consistency": 50.0,
                 "community_score": 50.0,
                 "audience_segment_score": 50.0,
             },

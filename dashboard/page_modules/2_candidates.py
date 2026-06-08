@@ -136,7 +136,8 @@ _TIER_STYLE = {
 _FEATURE_KEYS = [
     "audience_score", "engagement_score", "virality_score",
     "posting_score", "monetization_score", "growth_score",
-    "character_consistency", "community_score", "audience_segment_score",
+    # "character_consistency",
+    "community_score", "audience_segment_score",
 ]
 
 
@@ -155,8 +156,7 @@ def _build_signals(c: dict) -> str:
         ("virality_score", 70, "radar.virality"),
         ("growth_score", 70, "radar.growth"),
         ("community_score", 80, "radar.community"),
-        ("character_consistency", 70, "radar.character_consistency"),
-
+        # ("character_consistency", 70, "radar.character_consistency"),
     ]
     for key, threshold, i18n_key in score_checks:
         val = c.get(key) or 0
@@ -347,7 +347,8 @@ def _render_candidates_table() -> None:
     _RADAR_LABELS = [
         t("radar.audience"), t("radar.engagement"), t("radar.virality"),
         t("radar.posting"), t("radar.monetization"), t("radar.growth"),
-        t("radar.character_consistency"), t("radar.community"),
+        # t("radar.character_consistency"),
+        t("radar.community"),
         t("radar.audience_segment"),
     ]
 

@@ -76,7 +76,6 @@ class TestSingleClassSupport:
             "posting_score": 1,
             "monetization_score": 1,
             "growth_score": 1,
-            "character_consistency": 1,
             "community_score": 1,
             "creator_type": "unknown",
         }
@@ -84,17 +83,17 @@ class TestSingleClassSupport:
 
 
 class TestBuildFeatureVectorV2:
-    def test_length_13(self):
+    def test_length_12(self):
         row = {k: float(i) for i, k in enumerate(FEATURE_COLS_V2)}
         row["creator_type"] = "unknown"
         v = _build_feature_vector_v2(row)
-        assert v.shape == (13,)
+        assert v.shape == (12,)
 
     def test_one_hot_oc_creator(self):
         row = {k: 0.0 for k in FEATURE_COLS_V2}
         row["creator_type"] = "oc_creator"
         v = _build_feature_vector_v2(row)
-        tail = v[7:].tolist()
+        tail = v[6:].tolist()
         from config.settings import CREATOR_TYPES
         expected = [1.0 if t == "oc_creator" else 0.0 for t in CREATOR_TYPES]
         assert tail == expected

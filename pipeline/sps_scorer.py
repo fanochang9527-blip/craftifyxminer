@@ -28,7 +28,7 @@ FEATURE_KEYS = [
     "posting_score",
     "monetization_score",
     "growth_score",
-    "character_consistency",
+    # "character_consistency",
     "community_score",
     "audience_segment_score",
 ]
@@ -40,7 +40,7 @@ WEIGHT_KEYS = [
     "posting",
     "monetization",
     "growth",
-    "character_consistency",
+    # "character_consistency",
     "community",
     "audience_segment",
 ]

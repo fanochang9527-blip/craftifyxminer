@@ -40,7 +40,7 @@ from db.connection import fetch_all
 from pipeline.feature_engine import (
     calc_audience,
     calc_audience_segment,
-    calc_character_consistency,
+    # calc_character_consistency,
     calc_conversation_rate,
     calc_fanart_ratio,
     calc_monetization,
@@ -63,7 +63,7 @@ V1_SELLABILITY_COLS = [
     "engagement_score",
     "monetization_score",
     "growth_score",
-    "character_consistency",
+    # "character_consistency",
     "community_score",
     "audience_segment_score",
 ]
@@ -71,7 +71,7 @@ V1_SELLABILITY_COLS = [
 V2_SELLABILITY_COLS = [
     "audience_score",
     "monetization_score",
-    "character_consistency",
+    # "character_consistency",
     "social_engagement_rate",
     "conversation_rate",
     "fanart_ratio",
@@ -144,7 +144,7 @@ def _compute_raw_features_for_creator(creator_id: int) -> dict:
         "posting_score": calc_posting(tweets),
         "monetization_score": calc_monetization(bio, website),
         "growth_score": 50.0,
-        "character_consistency": calc_character_consistency(tweets),
+        # "character_consistency": calc_character_consistency(tweets),
         "community_score": 0.0,  # V1 only, not used in V2
         "audience_segment_score": audience_segment_score,
         # V2 raw features
