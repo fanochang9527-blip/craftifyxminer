@@ -2,14 +2,14 @@
 # 初版静态配置，v1.2 迭代后由 XGBoost 自动校准
 
 oc_creator:
-  audience: 0.10
-  engagement: 0.15
-  virality: 0.10
+  audience: 0.15
+  engagement: 0.20
+  virality: 0.15
   posting: 0.05
-  monetization: 0.25
+  monetization: 0.30
   growth: 0.05
-  character_consistency: 0.25
-  community: 0.05
+  # character_consistency: 0.25
+  community: 0.10
   audience_segment: 0.00
 
 vtuber:
@@ -17,10 +17,10 @@ vtuber:
   engagement: 0.20
   virality: 0.15
   posting: 0.10
-  monetization: 0.15
+  monetization: 0.20
   growth: 0.10
-  character_consistency: 0.10
-  community: 0.05
+  # character_consistency: 0.10
+  community: 0.10
   audience_segment: 0.00
 
 fan_artist:
@@ -28,30 +28,30 @@ fan_artist:
   engagement: 0.15
   virality: 0.15
   posting: 0.10
-  monetization: 0.20
+  monetization: 0.25
   growth: 0.05
-  character_consistency: 0.10
-  community: 0.15
+  # character_consistency: 0.10
+  community: 0.20
   audience_segment: 0.00
 
 game_creator:
   audience: 0.15
-  engagement: 0.10
+  engagement: 0.15
   virality: 0.10
   posting: 0.05
-  monetization: 0.25
+  monetization: 0.30
   growth: 0.10
-  character_consistency: 0.15
-  community: 0.10
+  # character_consistency: 0.15
+  community: 0.15
   audience_segment: 0.00
 
 content_creator:
   audience: 0.15
   engagement: 0.15
   virality: 0.10
-  posting: 0.15
-  monetization: 0.15
+  posting: 0.20
+  monetization: 0.20
   growth: 0.10
-  character_consistency: 0.10
+  # character_consistency: 0.10
   community: 0.10
   audience_segment: 0.00

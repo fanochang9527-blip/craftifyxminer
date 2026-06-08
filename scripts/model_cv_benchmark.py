@@ -42,7 +42,7 @@ OLD_FEATURE_COLS = [
     "posting_score",
     "monetization_score",
     "growth_score",
-    "character_consistency",
+    # "character_consistency",
     "community_score",
     "audience_segment_score",
 ]
@@ -62,7 +62,7 @@ SELLABILITY_FEATURE_COLS = [
     "engagement_score",
     "monetization_score",
     "growth_score",
-    "character_consistency",
+    # "character_consistency",
     "community_score",
     "audience_segment_score",
 ]

@@ -11,7 +11,7 @@ DEFAULT_DIMENSION_LABELS = [
     "Posting",
     "Monetization",
     "Growth",
-    "Char. Consistency",
+    # "Char. Consistency",
     "Community",
     "Audience Segment",
 ]
@@ -23,7 +23,7 @@ DIMENSION_KEYS = [
     "posting_score",
     "monetization_score",
     "growth_score",
-    "character_consistency",
+    # "character_consistency",
     "community_score",
     "audience_segment_score",
 ]

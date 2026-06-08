@@ -34,7 +34,7 @@ FEATURE_COLS = [
     "engagement_score",
     "monetization_score",
     "growth_score",
-    "character_consistency",
+    # "character_consistency",
     "community_score",
     "audience_segment_score",
 ]
@@ -45,7 +45,7 @@ FEATURE_COLS = [
 FEATURE_COLS_V2 = [
     "audience_score",
     "monetization_score",
-    "character_consistency",
+    # "character_consistency",
     "social_engagement_rate",
     "conversation_rate",
     "fanart_ratio",
