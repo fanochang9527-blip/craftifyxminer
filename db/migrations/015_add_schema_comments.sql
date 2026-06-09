@@ -62,6 +62,7 @@ COMMENT ON COLUMN creator_features.monetization_score IS '变现潜力评分：�
 COMMENT ON COLUMN creator_features.character_consistency IS '角色一致性评分：基于图片 media_url 的域名集中度（来源：feature_engine.calc_character_consistency）';
 COMMENT ON COLUMN creator_features.community_score IS '社区影响力评分：基于 fanart 转推权重及 mention 互动（来源：feature_engine.calc_community）';
 COMMENT ON COLUMN creator_features.audience_segment_score IS '受众分段评分：multi_platform(80) / mainstream(50) / nsfw(20)（来源：feature_engine.calc_audience_segment）';
+COMMENT ON COLUMN creator_features.growth_is_real IS 'growth_score 是否已转正：true=基于真实历史快照计算，false=占位值 50.0（来源：growth_monitor.refresh_growth_scores）';
 COMMENT ON COLUMN creator_features.social_engagement_rate IS '社交互动率：(avg_likes + avg_retweets) / followers * 100（来源：feature_engine.calc_social_engagement_rate）';
 COMMENT ON COLUMN creator_features.conversation_rate IS '对话率：avg_replies / followers * 100（来源：feature_engine.calc_conversation_rate）';
 COMMENT ON COLUMN creator_features.fanart_ratio IS '同人作品占比：含 fanart 关键词的推文占比（来源：feature_engine.calc_fanart_ratio）';
