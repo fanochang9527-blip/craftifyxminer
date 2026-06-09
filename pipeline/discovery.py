@@ -17,11 +17,12 @@ from config.settings import (
     APIFY_API_TOKEN,
     APIFY_BUDGET_HARD_LIMIT,
     APIFY_CONFIG_PATH,
+    APIFY_L1_ACTOR,
     DAILY_ANCHOR_COUNT,
     DAILY_APIFY_BUDGET_USD,
     MAX_FOLLOWING_PER_ANCHOR,
 )
-from db.connection import execute, fetch_all, fetch_one, get_cursor
+from db.connection import execute, fetch_all, fetch_one, get_cursor, upsert_cost
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +151,8 @@ def trigger_l1_scan(
     with open(APIFY_CONFIG_PATH, encoding="utf-8") as f:
         apify_cfg = yaml.safe_load(f)
 
-    following_cfg = apify_cfg["following_actor"]
+    cfg_key = "alt_following_actor" if APIFY_L1_ACTOR == "alt" else "following_actor"
+    following_cfg = apify_cfg[cfg_key]
     actor_id = following_cfg["actor_id"]
     base_input = following_cfg["input"].copy()
 
@@ -161,19 +163,23 @@ def trigger_l1_scan(
         logger.info("No valid handles to scan")
         return {"runs_started": 0, "budget_ok": True}
 
-    if "twitterHandles" in base_input:
-        base_input["twitterHandles"] = handles
-    else:
-        base_input["handles"] = handles
+    # 兼容不同 Actor 的 handles 字段名
+    for key in ("twitterHandles", "usernames", "handles"):
+        if key in base_input:
+            base_input[key] = handles
+            break
     cap = max_following if max_following is not None else MAX_FOLLOWING_PER_ANCHOR
-    if "maxItems" in base_input:
-        base_input["maxItems"] = cap
-    elif "max_items" in base_input:
-        base_input["max_items"] = cap
+    for key in ("maxItems", "maxResults", "max_items"):
+        if key in base_input:
+            base_input[key] = cap
+            break
 
     run = client.actor(actor_id).call(run_input=base_input)
     run_id = run.get("id", "")
-    logger.info("Apify run completed: %s", run_id)
+    usage_usd = float(run.get("usageTotalUsd") or 0.0)
+    if usage_usd > 0:
+        upsert_cost(date.today(), apify_cost_usd=usage_usd)
+    logger.info("Apify run completed: %s (cost=$%.4f)", run_id, usage_usd)
 
     dataset_id = run.get("defaultDatasetId")
     stored = {}

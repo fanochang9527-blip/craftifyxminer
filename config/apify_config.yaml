@@ -28,3 +28,26 @@ followers_actor:
     getFollowers: true
     getFollowing: false
     maxItems: 1000
+
+# ------------------------------------------------------------------
+# 备选 Actor 配置（实验性，用于降低 Apify 费用）
+# 通过环境变量 APIFY_L1_ACTOR=alt / APIFY_L2_ACTOR=alt 切换
+# 注意：以下输入参数为示例，需根据所选 Actor 的实际文档调整
+# ------------------------------------------------------------------
+alt_following_actor:
+  # 示例：get-leads/all-in-one-x-scraper（following 模式，约 $0.20/1K results）
+  # 或 automation-lab/twitter-scraper（following 模式，$0.00115/user）
+  actor_id: "get-leads/all-in-one-x-scraper"
+  input:
+    mode: "following"
+    usernames: []
+    maxResults: 500
+
+alt_profile_actor:
+  # 示例：get-leads/all-in-one-x-scraper（user-tweets 模式）
+  # 注意：maxResults 的语义因 Actor 而异（全局 vs per-user），请在实际测试后校准
+  actor_id: "get-leads/all-in-one-x-scraper"
+  input:
+    mode: "user-tweets"
+    usernames: []
+    maxResults: 10

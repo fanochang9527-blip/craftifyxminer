@@ -5,7 +5,7 @@ import logging
 
 from apify_client import ApifyClient
 
-from db.connection import fetch_all, get_cursor
+from db.connection import fetch_all, fetch_one, get_cursor
 
 logger = logging.getLogger(__name__)
 
@@ -246,7 +246,17 @@ def process_dataset(client: ApifyClient, dataset_id: str) -> dict:
     """Fetch dataset from Apify, store items, and run filter pipeline.
 
     Convenience wrapper used by both webhook and discovery sync mode.
+    包含 dataset_id 去重，防止 webhook 与同步路径重复处理同一数据集。
     """
+    # 去重检查
+    dup = fetch_one(
+        "SELECT 1 FROM processed_datasets WHERE dataset_id = %s",
+        (dataset_id,),
+    )
+    if dup:
+        logger.info("Dataset %s already processed, skipping", dataset_id)
+        return {"store": {}, "filter": {}, "skipped": True}
+
     items = list(client.dataset(dataset_id).iterate_items())
     logger.info("Fetched %d items from dataset %s", len(items), dataset_id)
 
@@ -255,4 +265,12 @@ def process_dataset(client: ApifyClient, dataset_id: str) -> dict:
     logger.info("Stored: %s", store_stats)
 
     filter_stats = run_filter_pipeline(usernames=usernames)
+
+    # 记录已处理，防止重复消费
+    with get_cursor() as cur:
+        cur.execute(
+            "INSERT INTO processed_datasets (dataset_id) VALUES (%s) ON CONFLICT DO NOTHING",
+            (dataset_id,),
+        )
+
     return {"store": store_stats, "filter": filter_stats}
