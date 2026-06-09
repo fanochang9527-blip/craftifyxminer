@@ -16,7 +16,7 @@ from config.settings import (
     FOLLOWER_REFRESH_BATCH_SIZE,
     FOLLOWER_REFRESH_INTERVAL_DAYS,
 )
-from db.connection import fetch_all, fetch_one, get_cursor
+from db.connection import fetch_all, fetch_one, get_cursor, upsert_cost
 from pipeline.growth_monitor import record_snapshot
 
 logger = logging.getLogger(__name__)
@@ -145,6 +145,10 @@ def run_follower_refresh() -> dict:
     client = ApifyClient(APIFY_API_TOKEN)
     run = client.actor(following_cfg["actor_id"]).call(run_input=actor_input)
     run_id = run.get("id", "")
+    usage_usd = float(run.get("usageTotalUsd") or 0.0)
+    if usage_usd > 0:
+        from datetime import date
+        upsert_cost(date.today(), apify_cost_usd=usage_usd)
 
     dataset_id = run.get("defaultDatasetId")
     stats = {"updated": 0}

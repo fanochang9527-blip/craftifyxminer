@@ -13,6 +13,7 @@ from config.settings import (
     APIFY_API_TOKEN,
     APIFY_BUDGET_HARD_LIMIT,
     APIFY_CONFIG_PATH,
+    APIFY_L2_ACTOR,
     DAILY_APIFY_BUDGET_USD,
     DEEP_SCRAPE_BATCH_SIZE,
 )
@@ -220,18 +221,26 @@ def trigger_deep_scrape_batch(limit: int | None = None) -> dict:
     with open(APIFY_CONFIG_PATH, encoding="utf-8") as f:
         apify_cfg = yaml.safe_load(f)
 
-    profile_cfg = apify_cfg["profile_actor"]
+    cfg_key = "alt_profile_actor" if APIFY_L2_ACTOR == "alt" else "profile_actor"
+    profile_cfg = apify_cfg[cfg_key]
     actor_input = profile_cfg["input"].copy()
-    if "twitterHandles" in actor_input:
-        actor_input["twitterHandles"] = handles
-    else:
-        actor_input["handles"] = handles
-    tweets_per_handle = 10
-    actor_input["maxItems"] = max(actor_input.get("maxItems", 500), len(handles) * tweets_per_handle)
+    for key in ("twitterHandles", "usernames", "handles"):
+        if key in actor_input:
+            actor_input[key] = handles
+            break
+
+    # apidojo tweet-scraper 的 maxItems 是全局计数，需要乘 handles 数；
+    # 备选 Actor 的 maxResults 多为 per-user 语义，直接信任配置值
+    if "apidojo" in profile_cfg.get("actor_id", ""):
+        tweets_per_handle = 10
+        actor_input["maxItems"] = max(actor_input.get("maxItems", 500), len(handles) * tweets_per_handle)
 
     client = ApifyClient(APIFY_API_TOKEN)
     run = client.actor(profile_cfg["actor_id"]).call(run_input=actor_input)
     run_id = run.get("id", "")
+    usage_usd = float(run.get("usageTotalUsd") or 0.0)
+    if usage_usd > 0:
+        upsert_cost(date.today(), apify_cost_usd=usage_usd)
 
     # Fetch results immediately (synchronous call waits for completion)
     dataset_id = run.get("defaultDatasetId")
@@ -269,18 +278,24 @@ def trigger_seed_deep_scrape(usernames: list[str]) -> dict:
     with open(APIFY_CONFIG_PATH, encoding="utf-8") as f:
         apify_cfg = yaml.safe_load(f)
 
-    profile_cfg = apify_cfg["profile_actor"]
+    cfg_key = "alt_profile_actor" if APIFY_L2_ACTOR == "alt" else "profile_actor"
+    profile_cfg = apify_cfg[cfg_key]
     actor_input = profile_cfg["input"].copy()
-    if "twitterHandles" in actor_input:
-        actor_input["twitterHandles"] = usernames
-    else:
-        actor_input["handles"] = usernames
-    tweets_per_handle = 10
-    actor_input["maxItems"] = max(actor_input.get("maxItems", 500), len(usernames) * tweets_per_handle)
+    for key in ("twitterHandles", "usernames", "handles"):
+        if key in actor_input:
+            actor_input[key] = usernames
+            break
+
+    if "apidojo" in profile_cfg.get("actor_id", ""):
+        tweets_per_handle = 10
+        actor_input["maxItems"] = max(actor_input.get("maxItems", 500), len(usernames) * tweets_per_handle)
 
     client = ApifyClient(APIFY_API_TOKEN)
     run = client.actor(profile_cfg["actor_id"]).call(run_input=actor_input)
     run_id = run.get("id", "")
+    usage_usd = float(run.get("usageTotalUsd") or 0.0)
+    if usage_usd > 0:
+        upsert_cost(date.today(), apify_cost_usd=usage_usd)
 
     dataset_id = run.get("defaultDatasetId")
     stats = {}

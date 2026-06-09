@@ -484,7 +484,16 @@ COMMENT ON COLUMN seed_follower_snapshots.source IS '数据来源';
 COMMENT ON COLUMN seed_follower_snapshots.batch_tag IS '批次标签，用于区分不同采集批次';
 CREATE INDEX IF NOT EXISTS idx_seed_snapshots_creator_time ON seed_follower_snapshots (creator_id, observed_at DESC);
 
--- 17. creator_content_analysis (多模态内容风格分析)
+-- 17. processed_datasets (Apify dataset 去重表，防止 webhook + sync 重复处理)
+CREATE TABLE IF NOT EXISTS processed_datasets (
+    dataset_id TEXT PRIMARY KEY,
+    processed_at TIMESTAMP DEFAULT NOW()
+);
+COMMENT ON TABLE processed_datasets IS '已处理的 Apify dataset 去重表：webhook 异步回调与同步调用可能处理同一 dataset，通过此表去重';
+COMMENT ON COLUMN processed_datasets.dataset_id IS 'Apify dataset ID';
+COMMENT ON COLUMN processed_datasets.processed_at IS '处理完成时间';
+
+-- 18. creator_content_analysis (多模态内容风格分析)
 CREATE TABLE IF NOT EXISTS creator_content_analysis (
     id SERIAL PRIMARY KEY,
     creator_id INTEGER REFERENCES creators(id),

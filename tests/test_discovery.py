@@ -10,7 +10,7 @@ for mod_name in ("psycopg2", "psycopg2.pool", "psycopg2.extras"):
     if mod_name not in sys.modules:
         sys.modules[mod_name] = MagicMock()
 
-from pipeline.discovery import _anchor_priority_and_cooldown, generate_daily_seeds
+from pipeline.discovery import _anchor_priority_and_cooldown, generate_daily_seeds, trigger_l1_scan
 
 
 # ---------------------------------------------------------------------------
@@ -203,3 +203,88 @@ class TestGenerateDailySeeds:
         # Check anchor_seeds contains our username
         call_args = insert_calls[0][0]
         assert "seed1" in str(call_args)
+
+
+# ---------------------------------------------------------------------------
+# Tests — trigger_l1_scan actor switching
+# ---------------------------------------------------------------------------
+
+class TestTriggerL1ScanActorSwitching:
+    @patch("pipeline.discovery.upsert_cost")
+    @patch("pipeline.discovery.yaml.safe_load")
+    @patch("pipeline.discovery.ApifyClient")
+    @patch("pipeline.discovery.APIFY_L1_ACTOR", "alt")
+    @patch("pipeline.discovery.fetch_one")
+    def test_uses_alt_following_actor_when_configured(self, mock_fetch_one, mock_client_class, mock_yaml_load, mock_upsert_cost):
+        """当 APIFY_L1_ACTOR=alt 时，应使用 alt_following_actor 配置。"""
+        mock_fetch_one.return_value = {"today_cost": 0.0}
+        mock_yaml_load.return_value = {
+            "alt_following_actor": {
+                "actor_id": "get-leads/all-in-one-x-scraper",
+                "input": {"mode": "following", "usernames": [], "maxResults": 500},
+            },
+            "following_actor": {
+                "actor_id": "apidojo/twitter-user-scraper",
+                "input": {"twitterHandles": [], "getFollowing": True, "maxItems": 500},
+            },
+        }
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+        mock_run = {"id": "run123", "defaultDatasetId": "ds123", "usageTotalUsd": 0.32}
+        mock_client.actor.return_value.call.return_value = mock_run
+        mock_dataset = MagicMock()
+        mock_dataset.iterate_items.return_value = []
+        mock_client.dataset.return_value = mock_dataset
+
+        result = trigger_l1_scan(
+            anchors=[{"username": "testuser", "strategy": "seed_following", "seed_id": 1}]
+        )
+
+        mock_client.actor.assert_called_once_with("get-leads/all-in-one-x-scraper")
+        call_input = mock_client.actor.return_value.call.call_args[1]["run_input"]
+        assert call_input["mode"] == "following"
+        assert call_input["usernames"] == ["testuser"]
+        assert call_input["maxResults"] == 500
+        assert result["run_id"] == "run123"
+        mock_upsert_cost.assert_called_once()
+        call_kwargs = mock_upsert_cost.call_args[1]
+        assert call_kwargs["apify_cost_usd"] == 0.32
+
+    @patch("pipeline.discovery.upsert_cost")
+    @patch("pipeline.discovery.yaml.safe_load")
+    @patch("pipeline.discovery.ApifyClient")
+    @patch("pipeline.discovery.APIFY_L1_ACTOR", "apidojo")
+    @patch("pipeline.discovery.fetch_one")
+    def test_uses_default_following_actor(self, mock_fetch_one, mock_client_class, mock_yaml_load, mock_upsert_cost):
+        """当 APIFY_L1_ACTOR=apidojo（默认）时，应使用 following_actor 配置。"""
+        mock_fetch_one.return_value = {"today_cost": 0.0}
+        mock_yaml_load.return_value = {
+            "alt_following_actor": {
+                "actor_id": "get-leads/all-in-one-x-scraper",
+                "input": {"mode": "following", "usernames": [], "maxResults": 500},
+            },
+            "following_actor": {
+                "actor_id": "apidojo/twitter-user-scraper",
+                "input": {"twitterHandles": [], "getFollowing": True, "maxItems": 500},
+            },
+        }
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+        mock_run = {"id": "run456", "defaultDatasetId": "ds456", "usageTotalUsd": 0.35}
+        mock_client.actor.return_value.call.return_value = mock_run
+        mock_dataset = MagicMock()
+        mock_dataset.iterate_items.return_value = []
+        mock_client.dataset.return_value = mock_dataset
+
+        result = trigger_l1_scan(
+            anchors=[{"username": "testuser", "strategy": "seed_following", "seed_id": 1}]
+        )
+
+        mock_client.actor.assert_called_once_with("apidojo/twitter-user-scraper")
+        call_input = mock_client.actor.return_value.call.call_args[1]["run_input"]
+        assert call_input["twitterHandles"] == ["testuser"]
+        assert call_input["maxItems"] == 500
+        assert result["run_id"] == "run456"
+        mock_upsert_cost.assert_called_once()
+        call_kwargs = mock_upsert_cost.call_args[1]
+        assert call_kwargs["apify_cost_usd"] == 0.35

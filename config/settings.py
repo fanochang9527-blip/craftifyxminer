@@ -16,6 +16,12 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://miner:password@localhost:
 APIFY_API_TOKEN = os.getenv("APIFY_API_TOKEN", "")
 APIFY_WEBHOOK_SECRET = os.getenv("APIFY_WEBHOOK_SECRET", "")
 
+# --- Apify Actor 切换（实验性费用优化）---
+# "apidojo" = 默认官方 Actor（稳定，费用较高）
+# "alt"     = 备选 Actor（apify_config.yaml 中 alt_*_actor 配置，费用较低）
+APIFY_L1_ACTOR = os.getenv("APIFY_L1_ACTOR", "apidojo")
+APIFY_L2_ACTOR = os.getenv("APIFY_L2_ACTOR", "apidojo")
+
 # --- LLM (统一 OpenAI 兼容接口) ---
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "moonshot")
 LLM_MODEL = os.getenv("LLM_MODEL", "kimi-k2.5")

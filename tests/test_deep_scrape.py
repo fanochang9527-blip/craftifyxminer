@@ -9,7 +9,7 @@ for mod_name in ("psycopg2", "psycopg2.pool", "psycopg2.extras"):
     if mod_name not in sys.modules:
         sys.modules[mod_name] = MagicMock()
 
-from pipeline.deep_scrape import _store_deep_scrape_results
+from pipeline.deep_scrape import _store_deep_scrape_results, trigger_deep_scrape_batch, trigger_seed_deep_scrape
 
 
 def _make_tweet_item(tweet_id: str, username: str, media_list: list[dict]) -> dict:
@@ -201,3 +201,85 @@ class TestStoreDeepScrapeResults:
 
         assert params[8] == ["http://old.url/media.jpg"]
         assert params[9] == ["photo"]
+
+
+# ---------------------------------------------------------------------------
+# Tests — actor switching
+# ---------------------------------------------------------------------------
+
+class TestActorSwitching:
+    @patch("pipeline.deep_scrape.upsert_cost")
+    @patch("pipeline.deep_scrape.yaml.safe_load")
+    @patch("pipeline.deep_scrape.ApifyClient")
+    @patch("pipeline.deep_scrape.APIFY_L2_ACTOR", "alt")
+    @patch("pipeline.deep_scrape._check_budget")
+    @patch("pipeline.deep_scrape._get_pending_candidates")
+    def test_deep_scrape_uses_alt_actor(self, mock_get_candidates, mock_check_budget, mock_client_class, mock_yaml_load, mock_upsert_cost):
+        """当 APIFY_L2_ACTOR=alt 时，应使用 alt_profile_actor 配置。"""
+        mock_check_budget.return_value = True
+        mock_get_candidates.return_value = [{"id": 1, "username": "testuser"}]
+        mock_yaml_load.return_value = {
+            "alt_profile_actor": {
+                "actor_id": "get-leads/all-in-one-x-scraper",
+                "input": {"mode": "user-tweets", "usernames": [], "maxResults": 10},
+            },
+            "profile_actor": {
+                "actor_id": "apidojo/tweet-scraper",
+                "input": {"twitterHandles": [], "maxItems": 500},
+            },
+        }
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+        mock_run = {"id": "run789", "defaultDatasetId": "ds789", "usageTotalUsd": 0.04}
+        mock_client.actor.return_value.call.return_value = mock_run
+        mock_dataset = MagicMock()
+        mock_dataset.iterate_items.return_value = []
+        mock_client.dataset.return_value = mock_dataset
+
+        result = trigger_deep_scrape_batch(limit=1)
+
+        mock_client.actor.assert_called_once_with("get-leads/all-in-one-x-scraper")
+        call_input = mock_client.actor.return_value.call.call_args[1]["run_input"]
+        assert call_input["mode"] == "user-tweets"
+        assert call_input["usernames"] == ["testuser"]
+        assert call_input["maxResults"] == 10
+        assert result["run_id"] == "run789"
+        mock_upsert_cost.assert_called_once()
+        call_kwargs = mock_upsert_cost.call_args[1]
+        assert call_kwargs["apify_cost_usd"] == 0.04
+
+    @patch("pipeline.deep_scrape.upsert_cost")
+    @patch("pipeline.deep_scrape.yaml.safe_load")
+    @patch("pipeline.deep_scrape.ApifyClient")
+    @patch("pipeline.deep_scrape.APIFY_L2_ACTOR", "apidojo")
+    def test_seed_deep_scrape_uses_default_actor(self, mock_client_class, mock_yaml_load, mock_upsert_cost):
+        """当 APIFY_L2_ACTOR=apidojo（默认）时，应使用 profile_actor 配置并乘 maxItems。"""
+        mock_yaml_load.return_value = {
+            "alt_profile_actor": {
+                "actor_id": "get-leads/all-in-one-x-scraper",
+                "input": {"mode": "user-tweets", "usernames": [], "maxResults": 10},
+            },
+            "profile_actor": {
+                "actor_id": "apidojo/tweet-scraper",
+                "input": {"twitterHandles": [], "maxItems": 500},
+            },
+        }
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+        mock_run = {"id": "run000", "defaultDatasetId": "ds000", "usageTotalUsd": 1.2}
+        mock_client.actor.return_value.call.return_value = mock_run
+        mock_dataset = MagicMock()
+        mock_dataset.iterate_items.return_value = []
+        mock_client.dataset.return_value = mock_dataset
+
+        result = trigger_seed_deep_scrape(usernames=["user1", "user2"])
+
+        mock_client.actor.assert_called_once_with("apidojo/tweet-scraper")
+        call_input = mock_client.actor.return_value.call.call_args[1]["run_input"]
+        assert call_input["twitterHandles"] == ["user1", "user2"]
+        # apidojo actor 的全局 maxItems 应取 max(配置默认值, handles 数 × 10)
+        assert call_input["maxItems"] == 500
+        assert result["run_id"] == "run000"
+        mock_upsert_cost.assert_called_once()
+        call_kwargs = mock_upsert_cost.call_args[1]
+        assert call_kwargs["apify_cost_usd"] == 1.2
