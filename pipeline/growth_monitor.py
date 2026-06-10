@@ -19,6 +19,21 @@ logger = logging.getLogger(__name__)
 _PLACEHOLDER = 50.0
 
 
+def _is_growth_real(row: dict | None) -> bool:
+    """Check if a creator's growth_score has graduated from placeholder.
+
+    Priority:
+      1. growth_is_real field (explicit flag)
+      2. growth_score != 50.0 (backward compatibility)
+    """
+    if not row:
+        return False
+    explicit = row.get("growth_is_real")
+    if explicit is not None:
+        return bool(explicit)
+    return row.get("growth_score") != _PLACEHOLDER
+
+
 def record_snapshot(
     creator_id: int,
     followers: int,
@@ -132,10 +147,10 @@ def refresh_growth_scores() -> dict:
         checked += 1
         cid = row["creator_id"]
         current = fetch_one(
-            "SELECT growth_score FROM creator_features WHERE creator_id = %s",
+            "SELECT growth_score, growth_is_real FROM creator_features WHERE creator_id = %s",
             (cid,),
         )
-        if current and current.get("growth_score") != _PLACEHOLDER:
+        if current and _is_growth_real(current):
             continue
 
         score, is_real = calc_growth(cid, is_seed=False)
@@ -160,10 +175,10 @@ def refresh_growth_scores() -> dict:
         checked += 1
         cid = row["creator_id"]
         current = fetch_one(
-            "SELECT growth_score FROM creator_features WHERE creator_id = %s",
+            "SELECT growth_score, growth_is_real FROM creator_features WHERE creator_id = %s",
             (cid,),
         )
-        if current and current.get("growth_score") != _PLACEHOLDER:
+        if current and _is_growth_real(current):
             continue
 
         score, is_real = calc_growth(cid, is_seed=True)
@@ -346,7 +361,7 @@ def _update_growth_and_infer(
         cur.execute(
             """
             UPDATE creator_features
-            SET growth_score = %s, calculated_at = NOW()
+            SET growth_score = %s, calculated_at = NOW(), growth_is_real = true
             WHERE creator_id = %s
             """,
             (score, creator_id),

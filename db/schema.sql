@@ -108,6 +108,7 @@ CREATE TABLE IF NOT EXISTS creator_features (
     character_consistency FLOAT,
     community_score FLOAT,
     audience_segment_score FLOAT,
+    growth_is_real BOOLEAN DEFAULT false,
     -- 原始特征（用于 ML V2 实验组）
     social_engagement_rate FLOAT,
     conversation_rate FLOAT,
