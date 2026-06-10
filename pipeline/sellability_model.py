@@ -175,7 +175,7 @@ def train_model() -> dict:
         logger.warning("当前仅单类别，建议补负样本")
     else:
         # 样本少时先用 LogisticRegression，样本足够再切 XGBoostClassifier
-        if n_samples < 120:
+        if n_samples < 800:
             from sklearn.linear_model import LogisticRegression
 
             model = LogisticRegression(max_iter=1000, class_weight="balanced")
@@ -235,7 +235,7 @@ def train_model_v2() -> dict:
         model_type = f"DummyClassifier(constant={constant_class})"
         logger.warning("V2: 当前仅单类别，建议补负样本")
     else:
-        if n_samples < 120:
+        if n_samples < 800:
             from sklearn.linear_model import LogisticRegression
 
             model = LogisticRegression(max_iter=1000, class_weight="balanced")

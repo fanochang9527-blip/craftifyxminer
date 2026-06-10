@@ -192,7 +192,7 @@ def train_sellability_model(X: np.ndarray, y: np.ndarray, w: np.ndarray):
         model.fit(X, y)
         return model
 
-    if n_samples < 120:
+    if n_samples < 800:
         model = LogisticRegression(max_iter=1000, class_weight="balanced")
     else:
         model = XGBClassifier(
