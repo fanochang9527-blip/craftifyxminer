@@ -446,14 +446,18 @@ class ContentStyleFilter:
 
 
 def _get_pending_creators() -> list[dict]:
-    """获取已 deep-scrape 但尚未进行内容分析的创作者。"""
+    """获取已 deep-scrape 但尚未进行内容分析的创作者。
+
+    包含首次未分析（cca.id IS NULL）以及之前分析失败（status='failed'）的创作者，
+    确保日常 pipeline 会重跑失败的案例。
+    """
     return fetch_all(
         """SELECT c.id, c.username
            FROM creators c
            JOIN tweets t ON t.creator_id = c.id
            LEFT JOIN creator_content_analysis cca ON cca.creator_id = c.id
            WHERE c.bd_status IN ('rule_passed', 'ai_passed')
-             AND cca.id IS NULL
+             AND (cca.id IS NULL OR cca.status = 'failed')
            GROUP BY c.id, c.username
            LIMIT 500"""
     )
@@ -493,6 +497,10 @@ def _write_results(results: list[dict]) -> dict:
                            analyzed_at = EXCLUDED.analyzed_at,
                            model_used = EXCLUDED.model_used""",
                     (creator_id, "failed", r.get("model_used")),
+                )
+                cur.execute(
+                    "UPDATE creators SET bd_status = 'content_rejected' WHERE id = %s",
+                    (creator_id,),
                 )
             continue
 

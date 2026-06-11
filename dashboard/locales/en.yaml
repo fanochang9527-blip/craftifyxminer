@@ -276,6 +276,7 @@ chart:
   cost_usd: "Cost (USD)"
   series_total: "Total"
   series_passed: "Passed"
+  series_rejected: "Rejected"
   total_cost_usd: "Total cost"
   apify_cost_usd: "Apify"
   llm_cost_usd: "LLM"

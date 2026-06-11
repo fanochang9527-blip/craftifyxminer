@@ -55,7 +55,7 @@ def _get_backfill_candidates(limit: int) -> list[dict]:
 
     条件：
       - tweets 表中有该创作者的媒体推文（代表已深度抓取）
-      - creator_content_analysis 表中无任何记录（尚未多模态判断）
+      - creator_content_analysis 表中无记录，或之前分析失败（status='failed'）
       - bd_status 为 rule_passed 或 ai_passed（与 pipeline 流程一致）
     """
     return fetch_all(
@@ -64,7 +64,7 @@ def _get_backfill_candidates(limit: int) -> list[dict]:
            JOIN tweets t ON t.creator_id = c.id
            LEFT JOIN creator_content_analysis cca ON cca.creator_id = c.id
            WHERE c.bd_status IN ('rule_passed', 'ai_passed')
-             AND cca.id IS NULL
+             AND (cca.id IS NULL OR cca.status = 'failed')
            GROUP BY c.id, c.username
            LIMIT %s""",
         (limit,),
@@ -79,7 +79,7 @@ def _get_backfill_count() -> int:
            JOIN tweets t ON t.creator_id = c.id
            LEFT JOIN creator_content_analysis cca ON cca.creator_id = c.id
            WHERE c.bd_status IN ('rule_passed', 'ai_passed')
-             AND cca.id IS NULL"""
+             AND (cca.id IS NULL OR cca.status = 'failed')"""
     )
     return row[0]["cnt"] if row else 0
 

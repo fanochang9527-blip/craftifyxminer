@@ -272,6 +272,96 @@ class TestAnalyzeOne:
         assert result["model_used"] == "mock/mock-vision-model"
 
 
+class TestWriteResults:
+    @patch("pipeline.content_style_filter.get_cursor")
+    def test_failed_updates_bd_status_to_content_rejected(self, mock_get_cursor):
+        """多模态分析失败时，必须将 creators.bd_status 更新为 content_rejected，
+        防止失败创作者仍以 ai_passed/rule_passed 出现在前端。"""
+        from pipeline.content_style_filter import _write_results
+
+        mock_cur = MagicMock()
+        mock_get_cursor.return_value.__enter__ = MagicMock(return_value=mock_cur)
+        mock_get_cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+        results = [
+            {
+                "creator_id": 42,
+                "status": "failed",
+                "model_used": "mock/mock-model",
+            }
+        ]
+
+        stats = _write_results(results)
+        assert stats["failed"] == 1
+
+        # 验证 UPDATE creators 被执行
+        execute_calls = [call for call in mock_cur.execute.call_args_list]
+        update_calls = [c for c in execute_calls if "UPDATE creators SET bd_status" in str(c)]
+        assert len(update_calls) == 1
+        assert "content_rejected" in str(update_calls[0])
+
+    @patch("pipeline.content_style_filter.get_cursor")
+    def test_rejected_updates_bd_status_to_content_rejected(self, mock_get_cursor):
+        """多模态分析判定不通过时，bd_status 更新为 content_rejected。"""
+        from pipeline.content_style_filter import _write_results
+
+        mock_cur = MagicMock()
+        mock_get_cursor.return_value.__enter__ = MagicMock(return_value=mock_cur)
+        mock_get_cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+        results = [
+            {
+                "creator_id": 43,
+                "status": "analyzed",
+                "passed": False,
+                "is_realistic": True,
+                "has_fixed_ip": False,
+                "confidence": 0.9,
+                "model_used": "mock/mock-model",
+                "raw_result": {"is_realistic": True, "has_fixed_ip": False},
+                "media_sample": ["https://a/1.jpg"],
+            }
+        ]
+
+        stats = _write_results(results)
+        assert stats["rejected"] == 1
+
+        execute_calls = [call for call in mock_cur.execute.call_args_list]
+        update_calls = [c for c in execute_calls if "UPDATE creators SET bd_status" in str(c)]
+        assert len(update_calls) == 1
+        assert "content_rejected" in str(update_calls[0])
+
+    @patch("pipeline.content_style_filter.get_cursor")
+    def test_passed_does_not_change_bd_status(self, mock_get_cursor):
+        """多模态分析通过时，bd_status 保持不变。"""
+        from pipeline.content_style_filter import _write_results
+
+        mock_cur = MagicMock()
+        mock_get_cursor.return_value.__enter__ = MagicMock(return_value=mock_cur)
+        mock_get_cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+        results = [
+            {
+                "creator_id": 44,
+                "status": "analyzed",
+                "passed": True,
+                "is_realistic": False,
+                "has_fixed_ip": True,
+                "confidence": 0.9,
+                "model_used": "mock/mock-model",
+                "raw_result": {"is_realistic": False, "has_fixed_ip": True},
+                "media_sample": ["https://a/1.jpg"],
+            }
+        ]
+
+        stats = _write_results(results)
+        assert stats["passed"] == 1
+
+        execute_calls = [call for call in mock_cur.execute.call_args_list]
+        update_calls = [c for c in execute_calls if "UPDATE creators SET bd_status" in str(c)]
+        assert len(update_calls) == 0
+
+
 class TestFilterAllPending:
     @patch("pipeline.content_style_filter.CONTENT_STYLE_ENABLED", False)
     def test_disabled_returns_zero(self):

@@ -24,7 +24,7 @@ today_stats = fetch_one(
     """SELECT
            COUNT(*) FILTER (WHERE discovered_date = CURRENT_DATE) AS today_total,
            COUNT(*) FILTER (WHERE bd_status IN ('rule_passed', 'ai_passed') AND discovered_date = CURRENT_DATE) AS today_passed,
-           COUNT(*) FILTER (WHERE bd_status IN ('rule_rejected', 'ai_rejected') AND discovered_date = CURRENT_DATE) AS today_rejected
+           COUNT(*) FILTER (WHERE bd_status IN ('rule_rejected', 'ai_rejected', 'content_rejected') AND discovered_date = CURRENT_DATE) AS today_rejected
        FROM creators"""
 ) or {}
 
@@ -81,7 +81,8 @@ else:
 st.subheader(t("daily.weekly_trend"))
 trend_data = fetch_all(
     """SELECT discovered_date::text AS date, COUNT(*) AS total,
-              COUNT(*) FILTER (WHERE bd_status IN ('rule_passed', 'ai_passed')) AS passed
+              COUNT(*) FILTER (WHERE bd_status IN ('rule_passed', 'ai_passed')) AS passed,
+              COUNT(*) FILTER (WHERE bd_status IN ('rule_rejected', 'ai_rejected', 'content_rejected')) AS rejected
        FROM creators
        WHERE discovered_date >= CURRENT_DATE - INTERVAL '7 days'
        GROUP BY discovered_date
@@ -91,11 +92,12 @@ if trend_data:
     df_trend = pd.DataFrame(trend_data)
     st_col = t("chart.series_total")
     pass_col = t("chart.series_passed")
-    df_trend = df_trend.rename(columns={"total": st_col, "passed": pass_col})
+    rej_col = t("chart.series_rejected")
+    df_trend = df_trend.rename(columns={"total": st_col, "passed": pass_col, "rejected": rej_col})
     fig_t = px.line(
         df_trend,
         x="date",
-        y=[st_col, pass_col],
+        y=[st_col, pass_col, rej_col],
         labels={
             "value": t("chart.count"),
             "variable": t("chart.type"),
