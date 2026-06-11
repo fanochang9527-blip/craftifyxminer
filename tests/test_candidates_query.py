@@ -84,7 +84,7 @@ class TestBuildWhereClauses:
         assert "c.bd_status = %s" in sql
         assert "rejected_not_creator" in params
 
-    def test_bd_status_all_no_filter(self):
+    def test_bd_status_all_excludes_content_rejected(self):
         sql, params = build_where_clauses(
             centrality=[],
             creator_types=[],
@@ -93,7 +93,7 @@ class TestBuildWhereClauses:
             sps_min=0,
             sps_max=100,
         )
-        assert "c.bd_status" not in sql
+        assert "c.bd_status != 'content_rejected'" in sql
 
     def test_bd_status_specific_adds_filter(self):
         sql, params = build_where_clauses(

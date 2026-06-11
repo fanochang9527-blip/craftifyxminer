@@ -37,6 +37,7 @@ def build_where_clauses(
     clauses: list[str] = [
         "c.is_seed = false",
         "c.followers > 500",
+        "c.bd_status != 'content_rejected'",
         "cs.sps_score IS NOT NULL",
         "cs.sps_score BETWEEN %s AND %s",
         "(cs.sellability_score IS NULL OR cs.sellability_score BETWEEN %s AND %s)",

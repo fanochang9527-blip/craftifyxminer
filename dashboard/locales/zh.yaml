@@ -276,6 +276,7 @@ chart:
   cost_usd: "费用 (USD)"
   series_total: "总数"
   series_passed: "通过"
+  series_rejected: "拒绝"
   total_cost_usd: "总费用"
   apify_cost_usd: "Apify"
   llm_cost_usd: "LLM"
