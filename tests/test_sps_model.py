@@ -20,17 +20,17 @@ from pipeline.sps_model import (
 
 
 class TestBuildFeatureVector:
-    def test_length_13(self):
+    def test_length_12(self):
         row = {k: float(i) for i, k in enumerate(FEATURE_COLS)}
         row["creator_type"] = "unknown"
         v = _build_feature_vector(row)
-        assert v.shape == (13,)
+        assert v.shape == (12,)
 
     def test_one_hot_oc_creator(self):
         row = {k: 0.0 for k in FEATURE_COLS}
         row["creator_type"] = "oc_creator"
         v = _build_feature_vector(row)
-        tail = v[7:].tolist()
+        tail = v[6:].tolist()
         expected = [1.0 if t == "oc_creator" else 0.0 for t in CREATOR_TYPES]
         assert tail == expected
 
@@ -39,14 +39,14 @@ class TestBuildFeatureVector:
         row["creator_type"] = "unknown"
         v = _build_feature_vector(row)
         idx = CREATOR_TYPES.index("unknown")
-        assert v[7 + idx] == 1.0
-        assert sum(v[7:]) == pytest.approx(1.0)
+        assert v[6 + idx] == 1.0
+        assert sum(v[6:]) == pytest.approx(1.0)
 
     def test_missing_creator_type_defaults_unknown_one_hot(self):
         row = {k: 5.0 for k in FEATURE_COLS}
         v = _build_feature_vector(row)
         idx = CREATOR_TYPES.index("unknown")
-        assert v[7 + idx] == 1.0
+        assert v[6 + idx] == 1.0
 
 
 class TestPredictSPS:

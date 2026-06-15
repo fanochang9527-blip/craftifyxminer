@@ -42,7 +42,7 @@ class TestGetWeights:
     def test_unknown_falls_back(self):
         w = get_weights_for_type("totally_unknown_type")
         assert isinstance(w, dict)
-        assert len(w) >= 8
+        assert len(w) >= 7
 
     def test_all_types_sum_to_one(self):
         for ctype in ["oc_creator", "vtuber", "fan_artist", "game_creator", "content_creator"]:
@@ -93,7 +93,7 @@ class TestContactProbability:
 
 class TestKeyAlignment:
     def test_same_length(self):
-        assert len(FEATURE_KEYS) == len(WEIGHT_KEYS) == 8
+        assert len(FEATURE_KEYS) == len(WEIGHT_KEYS) == 7
 
 
 # ---------------------------------------------------------------------------

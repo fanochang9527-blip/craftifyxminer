@@ -27,7 +27,8 @@ FEATURE_KEYS = [
     "virality_score",
     "posting_score",
     "monetization_score",
-    "growth_score",
+    # FIXME: 临时停用 growth_score，待历史粉丝快照积累足够后重新启用
+    # "growth_score",
     # "character_consistency",
     "community_score",
     "audience_segment_score",
@@ -39,7 +40,8 @@ WEIGHT_KEYS = [
     "virality",
     "posting",
     "monetization",
-    "growth",
+    # FIXME: 临时停用 growth 权重，待历史粉丝快照积累足够后重新启用
+    # "growth",
     # "character_consistency",
     "community",
     "audience_segment",
@@ -219,11 +221,13 @@ def score_creator(creator_id: int) -> dict | None:
 
 def score_all_pending() -> int:
     """Score all creators that have features but no SPS score yet."""
-    from pipeline.growth_monitor import is_growth_system_mature
+    # FIXME: 临时停用 growth_score 成熟度过滤，待历史粉丝快照积累足够后重新启用
+    # from pipeline.growth_monitor import is_growth_system_mature
 
+    # maturity_filter = ""
+    # if is_growth_system_mature():
+    #     maturity_filter = "AND cf.growth_score IS DISTINCT FROM 50.0"
     maturity_filter = ""
-    if is_growth_system_mature():
-        maturity_filter = "AND cf.growth_score IS DISTINCT FROM 50.0"
 
     rows = fetch_all(
         f"""SELECT cf.creator_id FROM creator_features cf
