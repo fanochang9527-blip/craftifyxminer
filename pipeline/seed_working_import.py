@@ -12,6 +12,7 @@ from pathlib import Path
 import pandas as pd
 
 from db.connection import fetch_all, get_cursor
+from pipeline.creator_detail_sync import sync_creator_detail
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,10 @@ def import_seed_working(path: str | Path) -> dict:
                     (existing[u]["id"],),
                 )
             updated += 1
+            try:
+                sync_creator_detail(existing[u]["id"], sync_source="seed_working_import")
+            except Exception:
+                logger.exception("Failed to sync creator_detail for existing seed %s", u)
         else:
             with get_cursor() as cur:
                 cur.execute(
@@ -74,7 +79,14 @@ def import_seed_working(path: str | Path) -> dict:
                        RETURNING id""",
                     (u, u),
                 )
+                row = cur.fetchone()
+                new_creator_id = row["id"] if row else None
             inserted += 1
+            if new_creator_id:
+                try:
+                    sync_creator_detail(new_creator_id, sync_source="seed_working_import")
+                except Exception:
+                    logger.exception("Failed to sync creator_detail for new seed %s", u)
 
     logger.info(
         "Import complete: total=%d, inserted=%d, updated=%d",

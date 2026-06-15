@@ -26,6 +26,7 @@ from dashboard.candidates_query import (
     build_where_clauses,
     calc_pagination,
 )
+from pipeline.creator_detail_sync import sync_creator_detail
 
 
 def _render_pagination_controls(
@@ -418,6 +419,11 @@ def _render_candidates_table() -> None:
                                 "UPDATE creators SET bd_decision = %s, bd_status = %s, last_bd_update = NOW() WHERE id = %s",
                                 ("interested", "interested", cid),
                             )
+                        try:
+                            sync_creator_detail(cid, sync_source="bd_decision")
+                        except Exception:
+                            import logging
+                            logging.getLogger(__name__).exception("Failed to sync creator_detail after BD interested for creator %d", cid)
                         st.toast(t("candidates.marked_interested"))
                         st.rerun()
             with act_cols[2]:

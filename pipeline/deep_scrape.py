@@ -18,6 +18,7 @@ from config.settings import (
     DEEP_SCRAPE_BATCH_SIZE,
 )
 from db.connection import fetch_all, fetch_one, get_cursor, upsert_cost
+from pipeline.creator_detail_sync import sync_creator_detail
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,8 @@ def _store_deep_scrape_results(items: list[dict]) -> dict:
 
     profiles_updated = tweets_inserted = 0
 
+    synced_creator_profiles: dict[int, dict] = {}
+
     for username, tweets in by_author.items():
         author = author_info[username]
         with get_cursor() as cur:
@@ -100,14 +103,15 @@ def _store_deep_scrape_results(items: list[dict]) -> dict:
                 continue
             creator_id = row["id"]
             profiles_updated += 1
+            synced_creator_profiles[creator_id] = author
 
             # 追加：记录 snapshot（同一事务）
             cur.execute(
-                "SELECT is_seed FROM creators WHERE id = %s",
+                "SELECT is_seed, bd_decision FROM creators WHERE id = %s",
                 (creator_id,),
             )
-            is_seed_row = cur.fetchone()
-            is_seed = is_seed_row and is_seed_row.get("is_seed")
+            creator_row = cur.fetchone()
+            is_seed = creator_row and creator_row.get("is_seed")
             table = "seed_follower_snapshots" if is_seed else "creator_snapshots"
             author_tweets_count = (
                 author.get("statusesCount") or author.get("tweetsCount") or 0
@@ -165,6 +169,13 @@ def _store_deep_scrape_results(items: list[dict]) -> dict:
                     ),
                 )
                 tweets_inserted += 1
+
+    # 同步高价值创作者详情档案（种子或 BD interested）
+    for cid, author in synced_creator_profiles.items():
+        try:
+            sync_creator_detail(cid, sync_source="deep_scrape", raw_profile=author)
+        except Exception:
+            logger.exception("Failed to sync creator_detail for creator %d", cid)
 
     return {"profiles_updated": profiles_updated, "tweets_inserted": tweets_inserted}
 
