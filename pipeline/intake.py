@@ -81,7 +81,9 @@ def store_dataset_items(items: list[dict]) -> dict:
                 relations.append((source, username))
 
         bio = item.get("description") or item.get("bio") or ""
-        website = item.get("website") or item.get("url") or ""
+        # FIXME: creators.website 设计语义是“个人主页或店铺链接”，Twitter/X 主页 URL
+        # 不应写入该字段。当前仅保留 Apify 明确提供的 website，避免 url 污染变现判断逻辑。
+        website = item.get("website") or ""
         followers = item.get("followers") or item.get("followersCount") or 0
         following = item.get("following") or item.get("friendsCount") or 0
         tweets_count = item.get("statusesCount") or item.get("tweetsCount") or 0

@@ -9,7 +9,7 @@ for mod_name in ("psycopg2", "psycopg2.pool", "psycopg2.extras"):
     if mod_name not in sys.modules:
         sys.modules[mod_name] = MagicMock()
 
-from pipeline.intake import run_filter_pipeline
+from pipeline.intake import run_filter_pipeline, store_dataset_items
 
 
 def _setup_cursor_mock(mock_get_cursor):
@@ -92,3 +92,57 @@ class TestRunFilterPipeline:
         sql, params = ai_update.args
         assert "creator_type_auto" not in sql
         assert params == ("ai_rejected", 2)
+
+
+class TestStoreDatasetItems:
+    @patch("pipeline.intake.get_cursor")
+    def test_profile_url_not_written_to_website(self, mock_get_cursor):
+        """Twitter/X 主页 URL 不应被写入 creators.website。"""
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = {"is_insert": True, "id": 1}
+        mock_get_cursor.return_value.__enter__ = lambda self: mock_cursor
+        mock_get_cursor.return_value.__exit__ = lambda self, *args: False
+
+        items = [
+            {
+                "username": "testuser",
+                "url": "https://x.com/testuser",
+                "followers": 100,
+            }
+        ]
+        store_dataset_items(items)
+
+        insert_calls = [
+            call for call in mock_cursor.execute.call_args_list
+            if "INSERT INTO creators" in str(call.args[0])
+        ]
+        assert len(insert_calls) == 1
+        sql, params = insert_calls[0].args
+        # params: (username, bio, website, followers, following, tweets_count, platform_account_id)
+        assert params[2] == "", "Twitter/X profile URL should not be written to creators.website"
+
+    @patch("pipeline.intake.get_cursor")
+    def test_explicit_website_is_preserved(self, mock_get_cursor):
+        """Apify item 明确提供 website 时应正常写入 creators.website。"""
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = {"is_insert": True, "id": 2}
+        mock_get_cursor.return_value.__enter__ = lambda self: mock_cursor
+        mock_get_cursor.return_value.__exit__ = lambda self, *args: False
+
+        items = [
+            {
+                "username": "shopuser",
+                "url": "https://x.com/shopuser",
+                "website": "https://shopuser.booth.pm",
+                "followers": 100,
+            }
+        ]
+        store_dataset_items(items)
+
+        insert_calls = [
+            call for call in mock_cursor.execute.call_args_list
+            if "INSERT INTO creators" in str(call.args[0])
+        ]
+        assert len(insert_calls) == 1
+        sql, params = insert_calls[0].args
+        assert params[2] == "https://shopuser.booth.pm"
