@@ -29,11 +29,12 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 # V1：组合特征（控制组，保持现有行为不变）
+# FIXME: 临时停用 growth_score，待历史粉丝快照积累足够后重新启用
 FEATURE_COLS = [
     "audience_score",
     "engagement_score",
     "monetization_score",
-    "growth_score",
+    # "growth_score",
     # "character_consistency",
     "community_score",
     "audience_segment_score",
@@ -54,7 +55,7 @@ FEATURE_COLS_V2 = [
 
 
 def _build_feature_vector(row: dict) -> np.ndarray:
-    """Build 13-dim feature vector: 7 sellability-related scores + 6 one-hot creator_type."""
+    """Build 12-dim feature vector: 6 sellability-related scores + 6 one-hot creator_type."""
     scores = [float(row.get(col) or 0.0) for col in FEATURE_COLS]
     ctype = row.get("creator_type") or "unknown"
     one_hot = [1.0 if ctype == t else 0.0 for t in CREATOR_TYPES]
@@ -91,11 +92,13 @@ def _load_training_rows() -> tuple[list[dict], list[float]]:
     seen_ids = {int(r["creator_id"]) for r in rows if r.get("creator_id") is not None}
 
     # 你提供的初始样本规则：total_sales < 50 为负样本，> 50 为正样本（=50 不入样本）
-    from pipeline.growth_monitor import is_growth_system_mature
+    # FIXME: 临时停用 growth_score 成熟度过滤，待历史粉丝快照积累足够后重新启用
+    # from pipeline.growth_monitor import is_growth_system_mature
 
+    # maturity_filter = ""
+    # if is_growth_system_mature():
+    #     maturity_filter = "AND cf.growth_score IS DISTINCT FROM 50.0"
     maturity_filter = ""
-    if is_growth_system_mature():
-        maturity_filter = "AND cf.growth_score IS DISTINCT FROM 50.0"
 
     if len(rows) < 20:
         seed_labeled = fetch_all(

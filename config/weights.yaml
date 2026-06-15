@@ -7,10 +7,12 @@ oc_creator:
   virality: 0.15
   posting: 0.05
   monetization: 0.30
-  growth: 0.05
+  # FIXME: 临时停用 growth 权重，待历史粉丝快照积累足够后重新启用
+  # growth: 0.05
   # character_consistency: 0.25
   community: 0.10
-  audience_segment: 0.00
+  # 将原 growth 权重临时移至 audience_segment，保持权重和为 1.0
+  audience_segment: 0.05
 
 vtuber:
   audience: 0.15
@@ -18,10 +20,12 @@ vtuber:
   virality: 0.15
   posting: 0.10
   monetization: 0.20
-  growth: 0.10
+  # FIXME: 临时停用 growth 权重，待历史粉丝快照积累足够后重新启用
+  # growth: 0.10
   # character_consistency: 0.10
   community: 0.10
-  audience_segment: 0.00
+  # 将原 growth 权重临时移至 audience_segment，保持权重和为 1.0
+  audience_segment: 0.10
 
 fan_artist:
   audience: 0.10
@@ -29,10 +33,12 @@ fan_artist:
   virality: 0.15
   posting: 0.10
   monetization: 0.25
-  growth: 0.05
+  # FIXME: 临时停用 growth 权重，待历史粉丝快照积累足够后重新启用
+  # growth: 0.05
   # character_consistency: 0.10
   community: 0.20
-  audience_segment: 0.00
+  # 将原 growth 权重临时移至 audience_segment，保持权重和为 1.0
+  audience_segment: 0.05
 
 game_creator:
   audience: 0.15
@@ -40,10 +46,12 @@ game_creator:
   virality: 0.10
   posting: 0.05
   monetization: 0.30
-  growth: 0.10
+  # FIXME: 临时停用 growth 权重，待历史粉丝快照积累足够后重新启用
+  # growth: 0.10
   # character_consistency: 0.15
   community: 0.15
-  audience_segment: 0.00
+  # 将原 growth 权重临时移至 audience_segment，保持权重和为 1.0
+  audience_segment: 0.10
 
 content_creator:
   audience: 0.15
@@ -51,7 +59,9 @@ content_creator:
   virality: 0.10
   posting: 0.20
   monetization: 0.20
-  growth: 0.10
+  # FIXME: 临时停用 growth 权重，待历史粉丝快照积累足够后重新启用
+  # growth: 0.10
   # character_consistency: 0.10
   community: 0.10
-  audience_segment: 0.00
+  # 将原 growth 权重临时移至 audience_segment，保持权重和为 1.0
+  audience_segment: 0.10

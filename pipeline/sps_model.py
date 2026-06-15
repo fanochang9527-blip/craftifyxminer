@@ -25,13 +25,14 @@ from db.connection import fetch_all
 logger = logging.getLogger(__name__)
 
 # V1：组合特征（控制组，保持现有行为不变）
+# FIXME: 临时停用 growth_score，待历史粉丝快照积累足够后重新启用
 FEATURE_COLS = [
     "audience_score",
     "engagement_score",
     "virality_score",
     "posting_score",
     "monetization_score",
-    "growth_score",
+    # "growth_score",
     "audience_segment_score",
 ]
 
@@ -51,7 +52,7 @@ FEATURE_COLS_V2 = [
 
 
 def _build_feature_vector(row: dict) -> np.ndarray:
-    """Build 13-dim feature vector: 7 SPS-related scores + 6 one-hot creator_type."""
+    """Build 12-dim feature vector: 6 SPS-related scores + 6 one-hot creator_type."""
     scores = [float(row.get(col) or 0.0) for col in FEATURE_COLS]
     ctype = row.get("creator_type") or "unknown"
     one_hot = [1.0 if ctype == t else 0.0 for t in CREATOR_TYPES]
@@ -68,11 +69,13 @@ def _build_feature_vector_v2(row: dict) -> np.ndarray:
 
 def _load_training_data() -> tuple[np.ndarray, np.ndarray]:
     """Load seed creators with features + total_sales as (X, y)."""
-    from pipeline.growth_monitor import is_growth_system_mature
+    # FIXME: 临时停用 growth_score 成熟度过滤，待历史粉丝快照积累足够后重新启用
+    # from pipeline.growth_monitor import is_growth_system_mature
 
+    # maturity_filter = ""
+    # if is_growth_system_mature():
+    #     maturity_filter = "AND cf.growth_score IS DISTINCT FROM 50.0"
     maturity_filter = ""
-    if is_growth_system_mature():
-        maturity_filter = "AND cf.growth_score IS DISTINCT FROM 50.0"
 
     rows = fetch_all(
         f"""SELECT cf.*, c.total_sales,
@@ -225,7 +228,7 @@ def predict_sales(features_row: dict) -> float | None:
     """Predict raw sales value for a single creator.
 
     Args:
-        features_row: dict with 7 SPS feature scores + creator_type key.
+        features_row: dict with 6 SPS feature scores + creator_type key.
 
     Returns:
         Predicted sales (non-negative float), or None if model unavailable.
