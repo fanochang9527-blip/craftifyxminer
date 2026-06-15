@@ -25,6 +25,7 @@ import yaml
 from config.settings import BIO_RULES_PATH, CREATOR_TYPES
 from db.connection import get_cursor
 from pipeline.bio_rule_filter import BioRuleFilter
+from pipeline.creator_detail_sync import sync_creator_detail
 from pipeline.seed_file_loader import load_seed_dataframe
 from pipeline.type_classifier import classify_creator
 
@@ -188,10 +189,18 @@ def import_seeds(path: str, *, skip_post_pipeline: bool = False) -> dict:
             )
             result = cur.fetchone()
             creator_id = result["id"] if result else None
-            if result and result["is_insert"]:
+            is_insert = result and result["is_insert"]
+            if is_insert:
                 inserted += 1
             else:
                 updated += 1
+
+            # 同步高价值创作者详情档案
+            if creator_id:
+                try:
+                    sync_creator_detail(creator_id, sync_source="seed_import")
+                except Exception:
+                    logger.exception("Failed to sync creator_detail for seed %s", username)
 
             # 追加 snapshot（同一事务）
             if creator_id and int(str(row.get("followers", 0) or 0).replace(",", "")) > 0:
