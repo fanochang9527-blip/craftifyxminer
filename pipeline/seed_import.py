@@ -242,9 +242,11 @@ def import_seeds(path: str, *, skip_post_pipeline: bool = False) -> dict:
 
 
 def _post_import_pipeline(usernames: list[str], summary: dict) -> None:
-    """Trigger deep scrape, feature computation and model retraining for imported seeds."""
+    """Trigger deep scrape, feature computation, DNA analysis and model retraining for imported seeds."""
+    from pipeline.creator_dna import analyze_creator_dna
     from pipeline.deep_scrape import trigger_seed_deep_scrape
     from pipeline.feature_engine import compute_features_for_creator
+    from pipeline.sps_scorer import score_creator
     from db.connection import fetch_all
 
     logger.info("Starting post-import pipeline for %d seeds", len(usernames))
@@ -270,6 +272,28 @@ def _post_import_pipeline(usernames: list[str], summary: dict) -> None:
     summary["features_computed"] = features_computed
     logger.info("Computed features for %d seeds", features_computed)
 
+    # DNA 分析
+    dna_analyzed = 0
+    for row in seed_ids:
+        try:
+            analyze_creator_dna(row["id"])
+            dna_analyzed += 1
+        except Exception:
+            logger.exception("DNA analysis failed for creator %d", row["id"])
+    summary["dna_analyzed"] = dna_analyzed
+    logger.info("DNA analyzed for %d seeds", dna_analyzed)
+
+    # SPS 重新打分
+    scores_updated = 0
+    for row in seed_ids:
+        try:
+            score_creator(row["id"])
+            scores_updated += 1
+        except Exception:
+            logger.exception("SPS scoring failed for creator %d", row["id"])
+    summary["sps_scores_updated"] = scores_updated
+    logger.info("SPS scores updated for %d seeds", scores_updated)
+
     try:
         from pipeline.sps_model import train_model as train_sales_model
 
@@ -280,6 +304,17 @@ def _post_import_pipeline(usernames: list[str], summary: dict) -> None:
         logger.warning("sps_model module not yet available — skipping model retrain")
     except Exception:
         logger.exception("Model retraining failed")
+
+    try:
+        from pipeline.sps_model import train_model_dna as train_dna_sales_model
+
+        dna_train_result = train_dna_sales_model()
+        summary.setdefault("model_retrain", {})["dna_sales_model"] = dna_train_result
+        logger.info("DNA sales model retrained: %s", dna_train_result)
+    except ImportError:
+        logger.warning("sps_model DNA module not yet available — skipping DNA model retrain")
+    except Exception:
+        logger.exception("DNA model retraining failed")
 
     try:
         from pipeline.sellability_model import train_model as train_sellability_model

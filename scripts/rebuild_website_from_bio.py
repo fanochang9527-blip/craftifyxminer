@@ -21,7 +21,13 @@ import argparse
 import logging
 import re
 import sys
+from pathlib import Path
 from urllib.parse import urlparse
+
+# 确保从项目根目录导入 db/pipeline 等包
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
 # 允许在无法连接真实 DB 的本地测试环境中被导入时优雅失败
 try:

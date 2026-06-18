@@ -91,10 +91,20 @@ ANCHOR_LOW_VALUE_COOLDOWN_DAYS = int(os.getenv("ANCHOR_LOW_VALUE_COOLDOWN_DAYS",
 # --- 深度抓取（每批人数，冒烟时可设 3–5）---
 DEEP_SCRAPE_BATCH_SIZE = int(os.getenv("DEEP_SCRAPE_BATCH_SIZE", "300"))
 
+# --- 创作者 DNA 分析（SPS 模型输入）---
+CREATOR_DNA_ENABLED = os.getenv("CREATOR_DNA_ENABLED", "true").lower() in ("1", "true", "yes")
+DNA_LLM_ENABLED = os.getenv("DNA_LLM_ENABLED", "false").lower() in ("1", "true", "yes")
+DNA_APIFY_ENABLED = os.getenv("DNA_APIFY_ENABLED", "false").lower() in ("1", "true", "yes")
+DAILY_DNA_BUDGET_USD = float(os.getenv("DAILY_DNA_BUDGET_USD", "20"))
+DNA_MAX_TWEETS_PER_CREATOR = int(os.getenv("DNA_MAX_TWEETS_PER_CREATOR", "100"))
+DNA_LLM_BATCH_SIZE = int(os.getenv("DNA_LLM_BATCH_SIZE", "5"))
+DNA_PLACEHOLDER_CONTENT = ["anime"]
+
 # --- 路径 ---
 BIO_RULES_PATH = PROJECT_ROOT / "config" / "bio_rules.yaml"
 WEIGHTS_PATH = PROJECT_ROOT / "config" / "weights.yaml"
 APIFY_CONFIG_PATH = PROJECT_ROOT / "config" / "apify_config.yaml"
+MARKET_TIERS_PATH = PROJECT_ROOT / "config" / "market_tiers.yaml"
 MODEL_PATH = PROJECT_ROOT / "models" / "sps_model.joblib"
 MODEL_META_PATH = PROJECT_ROOT / "models" / "sps_model_meta.json"
 SELLABILITY_MODEL_PATH = PROJECT_ROOT / "models" / "sellability_model.joblib"
@@ -104,6 +114,9 @@ SPS_MODEL_V2_PATH = PROJECT_ROOT / "models" / "sps_model_v2.joblib"
 SPS_MODEL_V2_META_PATH = PROJECT_ROOT / "models" / "sps_model_v2_meta.json"
 SELLABILITY_MODEL_V2_PATH = PROJECT_ROOT / "models" / "sellability_model_v2.joblib"
 SELLABILITY_MODEL_V2_META_PATH = PROJECT_ROOT / "models" / "sellability_model_v2_meta.json"
+# DNA 模型（使用创作者 DNA 原始特征 + LassoCV）
+SPS_MODEL_DNA_PATH = PROJECT_ROOT / "models" / "sps_model_dna.joblib"
+SPS_MODEL_DNA_META_PATH = PROJECT_ROOT / "models" / "sps_model_dna_meta.json"
 
 # --- 双模型口径 ---
 # 资格模型阈值：>= 阈值判定为“建议联系”

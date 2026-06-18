@@ -13,6 +13,8 @@ import pandas as pd
 
 from db.connection import fetch_all, get_cursor
 from pipeline.creator_detail_sync import sync_creator_detail
+from pipeline.creator_dna import analyze_creator_dna
+from pipeline.sps_scorer import score_creator
 
 logger = logging.getLogger(__name__)
 
@@ -62,8 +64,10 @@ def import_seed_working(path: str | Path) -> dict:
             updated += 1
             try:
                 sync_creator_detail(existing[u]["id"], sync_source="seed_working_import")
+                analyze_creator_dna(existing[u]["id"])
+                score_creator(existing[u]["id"])
             except Exception:
-                logger.exception("Failed to sync creator_detail for existing seed %s", u)
+                logger.exception("Failed to sync creator_detail/DNA/SPS for existing seed %s", u)
         else:
             with get_cursor() as cur:
                 cur.execute(
@@ -85,8 +89,10 @@ def import_seed_working(path: str | Path) -> dict:
             if new_creator_id:
                 try:
                     sync_creator_detail(new_creator_id, sync_source="seed_working_import")
+                    analyze_creator_dna(new_creator_id)
+                    score_creator(new_creator_id)
                 except Exception:
-                    logger.exception("Failed to sync creator_detail for new seed %s", u)
+                    logger.exception("Failed to sync creator_detail/DNA/SPS for new seed %s", u)
 
     logger.info(
         "Import complete: total=%d, inserted=%d, updated=%d",

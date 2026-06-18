@@ -1,0 +1,287 @@
+# 创作者地区购买力分层
+# 用于 SPS 模型输入：market_tier_high / market_tier_mid / market_tier_low one-hot
+# 匹配规则：country 或 region 或 location 字段包含关键词即命中（不区分大小写）
+
+high:
+  - 美国
+  - 美國
+  - usa
+  - united states
+  - america
+  - california
+  - new york
+  - texas
+  - florida
+  - illinois
+  - washington
+  - oregon
+  - colorado
+  - arizona
+  - nevada
+  - georgia
+  - michigan
+  - pennsylvania
+  - ohio
+  - north carolina
+  - new jersey
+  - virginia
+  - massachusetts
+  - tennessee
+  - indiana
+  - missouri
+  - maryland
+  - wisconsin
+  - minnesota
+  - alabama
+  - south carolina
+  - louisiana
+  - kentucky
+  - oklahoma
+  - connecticut
+  - utah
+  - iowa
+  - arkansas
+  - mississippi
+  - kansas
+  - new mexico
+  - nebraska
+  - west virginia
+  - idaho
+  - hawaii
+  - new hampshire
+  - maine
+  - montana
+  - rhode island
+  - delaware
+  - south dakota
+  - north dakota
+  - alaska
+  - vermont
+  - wyoming
+  - canada
+  - toronto
+  - vancouver
+  - montreal
+  - calgary
+  - ottawa
+  - edmonton
+  - quebec
+  - united kingdom
+  - uk
+  - england
+  - london
+  - manchester
+  - birmingham
+  - scotland
+  - wales
+  - germany
+  - berlin
+  - munich
+  - hamburg
+  - france
+  - paris
+  - lyon
+  - italy
+  - rome
+  - milan
+  - spain
+  - madrid
+  - barcelona
+  - netherlands
+  - amsterdam
+  - belgium
+  - brussels
+  - switzerland
+  - zurich
+  - geneva
+  - austria
+  - vienna
+  - sweden
+  - stockholm
+  - norway
+  - oslo
+  - denmark
+  - copenhagen
+  - finland
+  - helsinki
+  - ireland
+  - dublin
+  - portugal
+  - lisbon
+  - japan
+  - tokyo
+  - osaka
+  - kyoto
+  - yokohama
+  - sapporo
+  - fukuoka
+  - nagoya
+  - korea
+  - seoul
+  - busan
+  - south korea
+  - australia
+  - sydney
+  - melbourne
+  - brisbane
+  - perth
+  - new zealand
+  - auckland
+  - wellington
+  - singapore
+  - luxembourg
+  - iceland
+  - monaco
+
+mid:
+  - china
+  - 中国
+  - beijing
+  - shanghai
+  - guangzhou
+  - shenzhen
+  - chengdu
+  - hangzhou
+  - wuhan
+  - xian
+  - taiwan
+  - taipei
+  - taichung
+  - kaohsiung
+  - hong kong
+  - macau
+  - malaysia
+  - kuala lumpur
+  - thailand
+  - bangkok
+  - indonesia
+  - jakarta
+  - philippines
+  - manila
+  - vietnam
+  - hanoi
+  - ho chi minh
+  - mexico
+  - mexico city
+  - guadalajara
+  - brazil
+  - sao paulo
+  - rio de janeiro
+  - argentina
+  - buenos aires
+  - chile
+  - santiago
+  - colombia
+  - bogota
+  - peru
+  - lima
+  - poland
+  - warsaw
+  - krakow
+  - czech
+  - prague
+  - hungary
+  - budapest
+  - romania
+  - bucharest
+  - bulgaria
+  - sofia
+  - croatia
+  - zagreb
+  - greece
+  - athens
+  - turkey
+  - istanbul
+  - ankara
+  - uae
+  - dubai
+  - abu dhabi
+  - qatar
+  - doha
+  - saudi arabia
+  - riyadh
+  - kuwait
+  - bahrain
+  - israel
+  - tel aviv
+  - south africa
+  - johannesburg
+  - cape town
+
+low:
+  - india
+  - mumbai
+  - delhi
+  - bangalore
+  - pakistan
+  - karachi
+  - lahore
+  - bangladesh
+  - dhaka
+  - sri lanka
+  - colombo
+  - nepal
+  - kathmandu
+  - myanmar
+  - yangon
+  - cambodia
+  - phnom penh
+  - laos
+  - vientiane
+  - mongolia
+  - ulaanbaatar
+  - uzbekistan
+  - kazakhstan
+  - almaty
+  - kyrgyzstan
+  - tajikistan
+  - turkmenistan
+  - azerbaijan
+  - baku
+  - armenia
+  - yerevan
+  - georgia country
+  - tbilisi
+  - moldova
+  - chisinau
+  - ukraine
+  - kyiv
+  - kiev
+  - russia
+  - moscow
+  - saint petersburg
+  - belarus
+  - minsk
+  - egypt
+  - cairo
+  - alexandria
+  - nigeria
+  - lagos
+  - abuja
+  - kenya
+  - nairobi
+  - ghana
+  - accra
+  - ethiopia
+  - addis ababa
+  - morocco
+  - casablanca
+  - rabat
+  - tunisia
+  - tunis
+  - algeria
+  - algiers
+  - iran
+  - tehran
+  - iraq
+  - baghdad
+  - jordan
+  - amman
+  - lebanon
+  - beirut
+  - syria
+  - yemen
+  - oman
+  - muscat
+  - afghanistan
+  - kabul

@@ -30,6 +30,18 @@ followers_actor:
     maxItems: 1000
 
 # ------------------------------------------------------------------
+# DNA Actor：用于抓取种子/BD interested 创作者的详细推文，供 SPS 模型使用
+# 比 profile_actor 更深，默认每人抓取 100 条推文
+# ------------------------------------------------------------------
+dna_actor:
+  actor_id: "apidojo/tweet-scraper"
+  input:
+    twitterHandles: []
+    maxItems: 2000
+    includeReplies: true
+    includeRetweets: true
+
+# ------------------------------------------------------------------
 # 备选 Actor 配置（实验性，用于降低 Apify 费用）
 # 通过环境变量 APIFY_L1_ACTOR=alt / APIFY_L2_ACTOR=alt 切换
 # 注意：以下输入参数为示例，需根据所选 Actor 的实际文档调整

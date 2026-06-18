@@ -16,6 +16,8 @@ from config.settings import (
     CREATOR_TYPES,
     MODEL_META_PATH,
     MODEL_PATH,
+    SPS_MODEL_DNA_META_PATH,
+    SPS_MODEL_DNA_PATH,
     SPS_MODEL_V2_META_PATH,
     SPS_MODEL_V2_PATH,
     SPS_SALES_NORMALIZER,
@@ -48,6 +50,30 @@ FEATURE_COLS_V2 = [
     "social_engagement_rate",
     "conversation_rate",
     "audience_segment_score",
+]
+
+# DNA：创作者 DNA 原始特征 + 商业/地区/形象信号
+# 使用 LassoCV 自动特征选择
+FEATURE_COLS_DNA = [
+    "followers_log",
+    "following_follower_ratio",
+    "avg_daily_posts_30d",
+    "reply_engagement_rate",
+    "account_age_days_log",
+    "has_shop_link",
+    "is_nsfw",
+    "is_multi_platform",
+    "market_tier_high",
+    "market_tier_mid",
+    "market_tier_low",
+    "content_furry",
+    "content_anime",
+    "content_vtuber",
+    "content_gaming",
+    "content_webcomic",
+    "content_bl",
+    "content_gl",
+    "content_nsfw",
 ]
 
 
@@ -310,4 +336,140 @@ def predict_batch(rows: list[dict]) -> list[float | None]:
 def predict_batch_v2(rows: list[dict]) -> list[float | None]:
     """Predict SPS scores for multiple creators using V2 raw features."""
     sales_batch = predict_sales_batch_v2(rows)
+    return [None if s is None else sales_to_sps(s) for s in sales_batch]
+
+
+# ------------------------------------------------------------------
+# DNA 模型：原始创作者特征 + LassoCV
+# ------------------------------------------------------------------
+
+def _build_feature_vector_dna(row: dict) -> np.ndarray:
+    """Build 15-dim DNA feature vector."""
+    return np.array([float(row.get(col) or 0.0) for col in FEATURE_COLS_DNA])
+
+
+def _load_training_data_dna() -> tuple[np.ndarray, np.ndarray]:
+    """Load seed creators with DNA features + total_sales as (X, y)."""
+    rows = fetch_all(
+        """SELECT cf.*, c.total_sales
+           FROM creator_features cf
+           JOIN creators c ON c.id = cf.creator_id
+           WHERE c.is_seed = true AND c.total_sales > 0"""
+    )
+    if not rows:
+        raise ValueError("No seed data with DNA features + total_sales found for training")
+
+    X = np.array([_build_feature_vector_dna(r) for r in rows])
+    y = np.log1p(np.array([float(r["total_sales"]) for r in rows]))
+    return X, y
+
+
+def train_model_dna() -> dict:
+    """Train or retrain the SPS DNA model with LassoCV.
+
+    Returns metadata dict with model_type, n_samples, timestamp, feature_names, coefficients.
+    """
+    from sklearn.linear_model import LassoCV
+    from sklearn.model_selection import LeaveOneOut
+
+    X, y = _load_training_data_dna()
+    n_samples = X.shape[0]
+
+    # LassoCV 自动选择 alpha，LOO CV 适合小样本
+    # 使用较宽的 alpha 范围，避免所有特征被压到 0
+    import numpy as np
+    cv = LeaveOneOut() if n_samples < 50 else 5
+    alphas = np.logspace(-4, 1, 100)
+    model = LassoCV(
+        alphas=alphas,
+        cv=cv,
+        random_state=42,
+        max_iter=20000,
+        selection="random",
+    )
+    model.fit(X, y)
+
+    # 如果 Lasso 把所有特征都压到 0，退化成常数模型，则改用 Ridge
+    if np.all(np.abs(model.coef_) < 1e-9):
+        logger.warning("LassoCV selected zero features — falling back to Ridge(alpha=10.0)")
+        from sklearn.linear_model import Ridge
+        model = Ridge(alpha=10.0)
+        model.fit(X, y)
+        model_type = "Ridge"
+    else:
+        model_type = "LassoCV"
+
+    SPS_MODEL_DNA_PATH.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(model, SPS_MODEL_DNA_PATH)
+
+    coefs = {name: float(coef) for name, coef in zip(FEATURE_COLS_DNA, model.coef_)}
+    selected_features = [name for name, coef in coefs.items() if abs(coef) > 1e-9]
+
+    meta = {
+        "model_type": model_type,
+        "n_samples": int(n_samples),
+        "n_features": len(FEATURE_COLS_DNA),
+        "feature_names": FEATURE_COLS_DNA,
+        "selected_features": selected_features,
+        "alpha": float(getattr(model, "alpha_", 10.0)),
+        "coefficients": coefs,
+        "target": "total_sales_log1p",
+        "sps_sales_normalizer": SPS_SALES_NORMALIZER,
+        "trained_at": datetime.utcnow().isoformat(),
+        "version": "dna_v1",
+    }
+    with open(SPS_MODEL_DNA_META_PATH, "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=2, ensure_ascii=False)
+
+    logger.info("DNA model trained: LassoCV with %d samples, selected %d features",
+                n_samples, len(selected_features))
+    return meta
+
+
+def load_model_dna():
+    """Load trained DNA model from disk. Returns None if not available."""
+    if not SPS_MODEL_DNA_PATH.exists():
+        logger.warning("No trained DNA model found at %s", SPS_MODEL_DNA_PATH)
+        return None
+    return joblib.load(SPS_MODEL_DNA_PATH)
+
+
+def predict_sales_dna(features_row: dict) -> float | None:
+    """Predict raw sales value for a single creator using DNA features."""
+    model = load_model_dna()
+    if model is None:
+        return None
+
+    X = _build_feature_vector_dna(features_row).reshape(1, -1)
+    log_pred = model.predict(X)[0]
+    sales = max(0.0, float(np.expm1(log_pred)))
+    return round(sales, 2)
+
+
+def predict_sps_dna(features_row: dict) -> float | None:
+    """Predict SPS score for a single creator using DNA features."""
+    sales = predict_sales_dna(features_row)
+    if sales is None:
+        return None
+    return sales_to_sps(sales)
+
+
+def predict_sales_batch_dna(rows: list[dict]) -> list[float | None]:
+    """Predict raw sales values for multiple creators using DNA features."""
+    model = load_model_dna()
+    if model is None:
+        return [None] * len(rows)
+
+    X = np.array([_build_feature_vector_dna(r) for r in rows])
+    log_preds = model.predict(X)
+    results: list[float | None] = []
+    for p in log_preds:
+        sales = max(0.0, float(np.expm1(p)))
+        results.append(round(sales, 2))
+    return results
+
+
+def predict_batch_dna(rows: list[dict]) -> list[float | None]:
+    """Predict SPS scores for multiple creators using DNA features."""
+    sales_batch = predict_sales_batch_dna(rows)
     return [None if s is None else sales_to_sps(s) for s in sales_batch]
