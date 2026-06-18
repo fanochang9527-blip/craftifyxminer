@@ -12,10 +12,13 @@ for mod_name in ("psycopg2", "psycopg2.pool", "psycopg2.extras"):
 from config.settings import CREATOR_TYPES
 from pipeline.sps_model import (
     FEATURE_COLS,
+    FEATURE_COLS_DNA,
     FEATURE_COLS_V2,
     _build_feature_vector,
+    _build_feature_vector_dna,
     _build_feature_vector_v2,
     predict_sps,
+    predict_sps_dna,
 )
 
 
@@ -74,3 +77,31 @@ class TestBuildFeatureVectorV2:
         from config.settings import CREATOR_TYPES
         idx = 8 + CREATOR_TYPES.index("vtuber")
         assert v[idx] == 1.0
+
+
+class TestBuildFeatureVectorDNA:
+    def test_length_19(self):
+        row = {k: float(i) for i, k in enumerate(FEATURE_COLS_DNA)}
+        v = _build_feature_vector_dna(row)
+        assert v.shape == (19,)
+
+    def test_boolean_one_hots(self):
+        row = {k: 0.0 for k in FEATURE_COLS_DNA}
+        row["market_tier_high"] = 1.0
+        row["content_furry"] = 1.0
+        row["has_shop_link"] = 1.0
+        v = _build_feature_vector_dna(row)
+        assert v[FEATURE_COLS_DNA.index("market_tier_high")] == 1.0
+        assert v[FEATURE_COLS_DNA.index("content_furry")] == 1.0
+        assert v[FEATURE_COLS_DNA.index("has_shop_link")] == 1.0
+        assert v[FEATURE_COLS_DNA.index("market_tier_mid")] == 0.0
+
+
+class TestPredictSPSDNA:
+    def test_no_model_file_returns_none(self, tmp_path):
+        fake = tmp_path / "missing_dna.joblib"
+        with patch("pipeline.sps_model.SPS_MODEL_DNA_PATH", fake):
+            from pipeline.sps_model import predict_sps_dna as predict_fn
+
+            row = {k: 50.0 for k in FEATURE_COLS_DNA}
+            assert predict_fn(row) is None

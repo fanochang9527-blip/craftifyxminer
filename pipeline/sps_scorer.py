@@ -126,6 +126,31 @@ def calc_predicted_sales(features: dict, creator_type: str) -> tuple[float, floa
     return round(sales, 2), round(float(sps), 2)
 
 
+def _has_dna_features(features: dict) -> bool:
+    """Check if creator_features row contains DNA features."""
+    return features.get("followers_log") is not None
+
+
+def calc_predicted_sales_dna(features: dict) -> tuple[float | None, float | None]:
+    """Return (predicted_sales, sps_score) using DNA model.
+
+    Returns (None, None) if DNA model unavailable or features incomplete.
+    """
+    if not _has_dna_features(features):
+        return None, None
+
+    try:
+        from pipeline.sps_model import predict_sales_dna, sales_to_sps
+
+        sales = predict_sales_dna(features)
+        if sales is not None:
+            return float(sales), float(sales_to_sps(sales))
+    except Exception:
+        logger.debug("DNA sales model prediction failed — falling back to V1")
+
+    return None, None
+
+
 def calc_contact_probability(sps: float, monetization: float) -> float:
     """Simplified contact probability: SPS*0.8 + Monetization*0.2, normalized to 0-1."""
     raw = sps * 0.8 + monetization * 0.2
@@ -170,9 +195,16 @@ def score_creator(creator_id: int) -> dict | None:
     sellability_score = calc_sellability(dict(features), creator_type)
     is_sellable = sellability_score >= SELLABILITY_SCORE_THRESHOLD
     # 不再把非 sellable 直接归零，保留预测销量与 SPS，供工作台解释与复核。
-    predicted_sales, sps = calc_predicted_sales(dict(features), creator_type)
+
+    # 优先使用 DNA 模型（如果特征可用且模型已训练）
+    predicted_sales, sps = calc_predicted_sales_dna(dict(features))
+    monetization_for_contact = float(features.get("has_shop_link") or 0) * 100.0
+    if predicted_sales is None or sps is None:
+        predicted_sales, sps = calc_predicted_sales(dict(features), creator_type)
+        monetization_for_contact = float(features.get("monetization_score") or 0)
+
     centrality = classify_centrality(seed_connections)
-    contact_prob = calc_contact_probability(sps, float(features.get("monetization_score") or 0))
+    contact_prob = calc_contact_probability(sps, monetization_for_contact)
 
     with get_cursor() as cur:
         cur.execute(
