@@ -642,3 +642,90 @@ COMMENT ON COLUMN creator_content_analysis.raw_result IS '原始分析结果 JSO
 COMMENT ON COLUMN creator_content_analysis.media_sample IS '用于分析的媒体样本 URL 列表';
 CREATE INDEX IF NOT EXISTS idx_content_analysis_status ON creator_content_analysis (status);
 CREATE INDEX IF NOT EXISTS idx_content_analysis_model ON creator_content_analysis (model_used);
+
+-- 20. projects (项目/合作级样本表)
+-- 每行对应一个项目；作者特征字段直接展开存放，便于项目级模型读取。
+CREATE TABLE IF NOT EXISTS projects (
+    project_id TEXT PRIMARY KEY,
+    creator_id INTEGER REFERENCES creators(id) ON DELETE SET NULL,
+    sku TEXT UNIQUE,
+    domain TEXT,
+    product_attribute TEXT,
+    price FLOAT,
+    order_quantity FLOAT NOT NULL,
+    ad_link TEXT,
+    ad_link_raw TEXT,
+    x_link TEXT,
+    metadata JSONB DEFAULT '{}',
+    -- 创作者基础信息
+    creator_username TEXT,
+    creator_followers FLOAT,
+    creator_following FLOAT,
+    creator_tweets_count FLOAT,
+    creator_bio TEXT,
+    -- 创作者数值/布尔特征
+    creator_followers_log FLOAT,
+    creator_following_follower_ratio FLOAT,
+    creator_avg_daily_posts_30d FLOAT,
+    creator_reply_engagement_rate FLOAT,
+    creator_account_age_days_log FLOAT,
+    creator_has_shop_link BOOLEAN,
+    creator_is_nsfw BOOLEAN,
+    creator_is_multi_platform BOOLEAN,
+    creator_market_tier_high BOOLEAN,
+    creator_market_tier_mid BOOLEAN,
+    creator_market_tier_low BOOLEAN,
+    creator_content_furry BOOLEAN,
+    creator_content_anime BOOLEAN,
+    creator_content_vtuber BOOLEAN,
+    creator_content_gaming BOOLEAN,
+    creator_content_webcomic BOOLEAN,
+    creator_content_bl BOOLEAN,
+    creator_content_gl BOOLEAN,
+    creator_content_nsfw BOOLEAN,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+COMMENT ON TABLE projects IS '项目/合作级样本表：单次合作项目的销量、特征与创作者关联';
+COMMENT ON COLUMN projects.project_id IS '系统生成的项目唯一编号';
+COMMENT ON COLUMN projects.creator_id IS '关联创作者 ID';
+COMMENT ON COLUMN projects.sku IS '外部打样编号，用于与外部系统对接';
+COMMENT ON COLUMN projects.domain IS '项目领域（枚举特征）';
+COMMENT ON COLUMN projects.product_attribute IS '产品属性（枚举特征）';
+COMMENT ON COLUMN projects.price IS '项目定价（USD）';
+COMMENT ON COLUMN projects.order_quantity IS '订单产品数量，项目级模型预测目标 y';
+COMMENT ON COLUMN projects.ad_link IS '清洗后保留的 X 平台链接（去重后拼接）';
+COMMENT ON COLUMN projects.ad_link_raw IS '汇总.xlsx 中原始的创作者推荐链接';
+COMMENT ON COLUMN projects.x_link IS '用于 Apify 采集的 X/Twitter 主链接';
+COMMENT ON COLUMN projects.metadata IS '扩展字段 JSONB，用于后续增加列';
+COMMENT ON COLUMN projects.creator_username IS '创作者 X 平台用户名';
+COMMENT ON COLUMN projects.creator_is_multi_platform IS '该项目原始链接中是否包含多个平台链接（创作者相关特征）';
+CREATE INDEX IF NOT EXISTS idx_projects_creator_id ON projects (creator_id);
+CREATE INDEX IF NOT EXISTS idx_projects_domain ON projects (domain);
+CREATE INDEX IF NOT EXISTS idx_projects_product_attribute ON projects (product_attribute);
+CREATE INDEX IF NOT EXISTS idx_projects_x_link ON projects (x_link);
+CREATE INDEX IF NOT EXISTS idx_projects_creator_username ON projects (creator_username);
+
+-- 21. project_scores (项目级销量预测结果表)
+CREATE TABLE IF NOT EXISTS project_scores (
+    id SERIAL PRIMARY KEY,
+    project_id TEXT REFERENCES projects(project_id) ON DELETE CASCADE,
+    creator_id INTEGER REFERENCES creators(id) ON DELETE SET NULL,
+    predicted_sales FLOAT,
+    sps_score FLOAT,
+    confidence FLOAT,
+    contact_probability FLOAT,
+    predicted_response_rate FLOAT,
+    updated_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(project_id)
+);
+COMMENT ON TABLE project_scores IS '项目级销量预测结果表：每个项目的预测销量与 SPS 评分';
+COMMENT ON COLUMN project_scores.project_id IS '关联项目 ID';
+COMMENT ON COLUMN project_scores.creator_id IS '关联创作者 ID';
+COMMENT ON COLUMN project_scores.predicted_sales IS '预测订单产品数量';
+COMMENT ON COLUMN project_scores.sps_score IS '映射后的 SPS 评分 0-100';
+COMMENT ON COLUMN project_scores.confidence IS '模型置信度';
+COMMENT ON COLUMN project_scores.contact_probability IS '联系概率';
+COMMENT ON COLUMN project_scores.predicted_response_rate IS '预测回复率';
+CREATE INDEX IF NOT EXISTS idx_project_scores_creator_id ON project_scores (creator_id);
+CREATE INDEX IF NOT EXISTS idx_project_scores_predicted_sales ON project_scores (predicted_sales);

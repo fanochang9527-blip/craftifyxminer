@@ -117,6 +117,9 @@ SELLABILITY_MODEL_V2_META_PATH = PROJECT_ROOT / "models" / "sellability_model_v2
 # DNA 模型（使用创作者 DNA 原始特征 + LassoCV）
 SPS_MODEL_DNA_PATH = PROJECT_ROOT / "models" / "sps_model_dna.joblib"
 SPS_MODEL_DNA_META_PATH = PROJECT_ROOT / "models" / "sps_model_dna_meta.json"
+# 项目级销量预测模型（项目特征 + 创作者 DNA 特征）
+SPS_MODEL_PROJECT_PATH = PROJECT_ROOT / "models" / "sps_model_project.joblib"
+SPS_MODEL_PROJECT_META_PATH = PROJECT_ROOT / "models" / "sps_model_project_meta.json"
 
 # --- 双模型口径 ---
 # 资格模型阈值：>= 阈值判定为“建议联系”
@@ -125,6 +128,8 @@ SELLABILITY_SCORE_THRESHOLD = float(os.getenv("SELLABILITY_SCORE_THRESHOLD", "60
 SELLABILITY_LABEL_SALES_THRESHOLD = float(os.getenv("SELLABILITY_LABEL_SALES_THRESHOLD", "50"))
 # SPS 作为“预测销量评分”：按 predicted_sales / normalizer 映射到 0-100
 SPS_SALES_NORMALIZER = float(os.getenv("SPS_SALES_NORMALIZER", "100"))
+# 项目级 SPS 评分归一化基数
+SPS_PROJECT_SALES_NORMALIZER = float(os.getenv("SPS_PROJECT_SALES_NORMALIZER", "100"))
 # 工作台灰度阶段：1=只展示新字段不改默认排序；2=默认按双模型排序
 BD_WORKBENCH_PHASE = int(os.getenv("BD_WORKBENCH_PHASE", "1"))
 # 非 sellable 候选在双模型排序中的 SPS 降权系数（0-1）
