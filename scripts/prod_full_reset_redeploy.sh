@@ -353,6 +353,50 @@ else:
   fi
 }
 
+run_project_sales_pipeline() {
+  local summary_src="$PROJECT_DIR/汇总.xlsx"
+  local summary_container="/app/data/汇总.xlsx"
+  local cleaned_container="/app/data/汇总_cleaned.csv"
+
+  if [[ ! -f "$summary_src" ]]; then
+    warn "汇总.xlsx not found at $summary_src, skipping project-level sales pipeline"
+    return
+  fi
+
+  log "Running project-level sales pipeline..."
+  # 将输入文件复制到 data/ 以便 docker 容器读取
+  cp -f "$summary_src" "$PROJECT_DIR/data/汇总.xlsx"
+
+  log "  [1/5] Cleaning 汇总.xlsx ..."
+  docker compose -f "$COMPOSE_FILE" run --rm server \
+    python scripts/clean_summary_xlsx.py "$summary_container" "$cleaned_container"
+
+  log "  [2/5] Importing projects ..."
+  docker compose -f "$COMPOSE_FILE" run --rm server \
+    python -c "
+from db.connection import execute
+execute('TRUNCATE TABLE projects RESTART IDENTITY CASCADE')
+execute('TRUNCATE TABLE project_scores RESTART IDENTITY CASCADE')
+print('Truncated projects and project_scores')
+"
+  docker compose -f "$COMPOSE_FILE" run --rm server \
+    python pipeline/project_import.py "$cleaned_container"
+
+  log "  [3/5] Syncing creator profiles via Apify ..."
+  docker compose -f "$COMPOSE_FILE" run --rm server \
+    python pipeline/project_creator_sync.py
+
+  log "  [4/5] Training project-level sales model ..."
+  docker compose -f "$COMPOSE_FILE" run --rm server \
+    python -m pipeline.project_sps_model train
+
+  log "  [5/5] Scoring projects ..."
+  docker compose -f "$COMPOSE_FILE" run --rm server \
+    python pipeline/project_scorer.py
+
+  log "Project-level sales pipeline complete"
+}
+
 health_check() {
   if [[ "$SKIP_HEALTHCHECK" -eq 1 ]]; then
     warn "Skip health check as requested."
@@ -437,6 +481,7 @@ main() {
   import_seeds
   backfill_features
   train_models_if_needed
+  run_project_sales_pipeline
   start_services
   docker compose -f "$COMPOSE_FILE" restart nginx
   health_check

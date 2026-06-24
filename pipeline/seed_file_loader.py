@@ -177,6 +177,18 @@ def load_seed_dataframe_from_xlsx(
     return df, load_stats
 
 
+def _read_csv_with_encoding_fallback(path: Path) -> pd.DataFrame:
+    """尝试多种编码读取 CSV，优先 UTF-8，失败则回退到 GBK/Latin1。"""
+    encodings = ["utf-8-sig", "utf-8", "gbk", "gb2312", "latin1"]
+    for enc in encodings:
+        try:
+            return pd.read_csv(path, encoding=enc)
+        except UnicodeDecodeError:
+            logger.debug("CSV decode failed with %s, trying next encoding", enc)
+            continue
+    raise ValueError(f"Could not decode CSV {path} with any of {encodings}")
+
+
 def load_seed_dataframe(path: str | Path) -> tuple[pd.DataFrame, dict]:
     """Load CSV or xlsx into a dataframe ready for validation + DB import.
 
@@ -190,7 +202,7 @@ def load_seed_dataframe(path: str | Path) -> tuple[pd.DataFrame, dict]:
     if suf == ".xls":
         raise ValueError("Legacy .xls requires xlrd; convert to .xlsx or export CSV.")
 
-    raw_df = pd.read_csv(path)
+    raw_df = _read_csv_with_encoding_fallback(path)
     raw_rows = len(raw_df)
 
     if "username" not in raw_df.columns:
