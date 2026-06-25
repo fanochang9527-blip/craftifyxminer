@@ -1,10 +1,11 @@
 """项目级销量预测模型（Model Project）。
 
-特征：项目特征（domain one-hot、product_attribute one-hot、price）+
-      创作者特征（直接从 projects 表读取，含 is_multi_platform）。
+特征：项目枚举特征（domain、product_attribute 单值整数编码）+ price +
+      创作者枚举特征（creator_market_tier 单值整数编码）+
+      创作者数值/布尔特征（直接从 projects 表读取）。
 目标：projects.order_quantity。
 
-样本量较小时使用 Ridge，保留所有特征。
+将同一业务字段的互斥选项编码为单个整数特征，让 Ridge 感知其互斥关系。
 """
 
 from __future__ import annotations
@@ -31,62 +32,64 @@ from db.connection import fetch_all
 
 logger = logging.getLogger(__name__)
 
-# 项目特征
-PROJECT_CATEGORICAL_FEATURES = {
-    "domain": ["OC", "同人", "vtuber", "游戏"],
-    "product_attribute": ["普货", "带磁"],
+# 项目枚举特征：同一字段的互斥选项映射为单个整数，让模型感知互斥关系
+PROJECT_ENUM_FEATURES = {
+    "domain": {"OC": 0, "同人": 1, "vtuber": 2, "游戏": 3},
+    "product_attribute": {"普货": 0, "带磁": 1},
 }
 PROJECT_NUMERIC_FEATURES = ["price"]
 
-# 创作者特征（直接来自 projects 表列）
+# 创作者枚举特征：市场层级映射为单个整数（存在自然顺序）
+CREATOR_ENUM_FEATURES = {
+    "creator_market_tier": {"low": 0, "mid": 1, "high": 2},
+}
+
+# 创作者数值/布尔特征（直接来自 projects 表列）
+# 注：内容分类特征（creator_content_*）已暂时停用，保留计算代码但不入模；
+#     creator_reply_engagement_rate / creator_avg_daily_posts_30d 已从模型中移除。
 CREATOR_FEATURES = [
     "creator_followers_log",
     "creator_following_follower_ratio",
-    "creator_avg_daily_posts_30d",
-    "creator_reply_engagement_rate",
     "creator_account_age_days_log",
     "creator_has_shop_link",
     "creator_is_nsfw",
     "creator_is_multi_platform",
-    "creator_market_tier_high",
-    "creator_market_tier_mid",
-    "creator_market_tier_low",
-    "creator_content_furry",
-    "creator_content_anime",
-    "creator_content_vtuber",
-    "creator_content_gaming",
-    "creator_content_webcomic",
-    "creator_content_bl",
-    "creator_content_gl",
-    "creator_content_nsfw",
 ]
 
 
 def _build_feature_names() -> list[str]:
     """返回所有特征列名（用于 meta 和可解释性）。"""
     names: list[str] = []
-    for col, values in PROJECT_CATEGORICAL_FEATURES.items():
-        for v in values:
-            names.append(f"{col}_{v}")
+    names.extend(PROJECT_ENUM_FEATURES.keys())
     names.extend(PROJECT_NUMERIC_FEATURES)
+    names.extend(CREATOR_ENUM_FEATURES.keys())
     names.extend(CREATOR_FEATURES)
     return names
+
+
+def _encode_enum(value: object, mapping: dict[str, int]) -> float:
+    """将枚举值映射为整数；未知/空值编码为 -1，便于模型区分缺失。"""
+    key = str(value or "").strip().lower()
+    return float(mapping.get(key, -1.0))
 
 
 def _build_feature_vector(row: dict) -> np.ndarray:
     """构建项目级特征向量。"""
     features: list[float] = []
 
-    # 1. 项目枚举特征 one-hot
-    for col, values in PROJECT_CATEGORICAL_FEATURES.items():
-        row_value = str(row.get(col) or "").strip()
-        features.extend([1.0 if row_value == v else 0.0 for v in values])
+    # 1. 项目枚举特征（单值整数编码，表达互斥关系）
+    for col, mapping in PROJECT_ENUM_FEATURES.items():
+        features.append(_encode_enum(row.get(col), mapping))
 
     # 2. 项目数值特征
     for col in PROJECT_NUMERIC_FEATURES:
         features.append(float(row.get(col) or 0.0))
 
-    # 3. 创作者特征
+    # 3. 创作者枚举特征
+    for col, mapping in CREATOR_ENUM_FEATURES.items():
+        features.append(_encode_enum(row.get(col), mapping))
+
+    # 4. 创作者数值/布尔特征
     for col in CREATOR_FEATURES:
         val = row.get(col)
         if val is None:
@@ -99,7 +102,8 @@ def _build_feature_vector(row: dict) -> np.ndarray:
 
 def _load_training_data() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """加载 projects 表，返回 (X, log_y, raw_quantities)。"""
-    feature_cols = ", ".join(CREATOR_FEATURES)
+    creator_cols = list(CREATOR_ENUM_FEATURES.keys()) + CREATOR_FEATURES
+    feature_cols = ", ".join(creator_cols)
     rows = fetch_all(
         f"""
         SELECT domain, product_attribute, price, order_quantity,
@@ -120,12 +124,11 @@ def _load_training_data() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
 def train_model() -> dict:
     """训练项目级销量预测模型。
 
-    当前样本量较小，使用 Ridge 回归保留所有特征。
+    样本量 >= 30 时使用 XGBoost，利用枚举特征的互斥关系；
+    样本量 < 30 时回退到 Ridge 保证小样本稳定性。
 
-    Returns metadata dict with model_type, n_samples, feature_names, coefficients.
+    Returns metadata dict with model_type, n_samples, feature_names, coefficients/importances.
     """
-    from sklearn.linear_model import Ridge
-
     X, y, raw_quantities = _load_training_data()
     n_samples = X.shape[0]
 
@@ -136,34 +139,74 @@ def train_model() -> dict:
     if X.shape[1] != len(feature_names):
         raise ValueError(f"Feature dimension mismatch: {X.shape[1]} vs {len(feature_names)}")
 
-    model = Ridge(alpha=1.0)
-    model.fit(X, y)
-    model_type = "Ridge"
+    if n_samples < 30:
+        from sklearn.linear_model import Ridge
+
+        model = Ridge(alpha=1.0)
+        model.fit(X, y)
+        model_type = "Ridge"
+        alpha = float(model.alpha)
+        coefs = {name: float(coef) for name, coef in zip(feature_names, model.coef_)}
+        importances: dict[str, float] | None = None
+    else:
+        from xgboost import XGBRegressor
+
+        model = XGBRegressor(
+            n_estimators=50,
+            max_depth=3,
+            learning_rate=0.05,
+            subsample=0.6,
+            colsample_bytree=0.6,
+            reg_alpha=1.0,
+            reg_lambda=2.0,
+            random_state=42,
+        )
+        model.fit(X, y)
+        model_type = "XGBoost"
+        alpha = None
+        coefs = None
+        importances = {
+            name: float(imp)
+            for name, imp in zip(feature_names, model.feature_importances_)
+        }
 
     SPS_MODEL_PROJECT_PATH.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(model, SPS_MODEL_PROJECT_PATH)
 
-    coefs = {name: float(coef) for name, coef in zip(feature_names, model.coef_)}
-    selected_features = [name for name, coef in coefs.items() if abs(coef) > 1e-6]
+    selected_features = [
+        name
+        for name in feature_names
+        if (coefs is None or abs(coefs[name]) > 1e-6)
+        and (importances is None or importances[name] > 1e-6)
+    ]
 
-    meta = {
+    meta: dict = {
         "model_type": model_type,
         "n_samples": int(n_samples),
         "n_features": len(feature_names),
         "feature_names": feature_names,
         "selected_features": selected_features,
-        "alpha": float(model.alpha),
-        "coefficients": coefs,
+        "enum_mappings": {
+            "project": PROJECT_ENUM_FEATURES,
+            "creator": CREATOR_ENUM_FEATURES,
+        },
         "target": "order_quantity_log1p",
         "sps_project_sales_normalizer": sales_normalizer,
         "trained_at": datetime.utcnow().isoformat(),
-        "version": "project_v1",
+        "version": "project_v3",
     }
+    if alpha is not None:
+        meta["alpha"] = alpha
+    if coefs is not None:
+        meta["coefficients"] = coefs
+    if importances is not None:
+        meta["feature_importances"] = importances
+
     with open(SPS_MODEL_PROJECT_META_PATH, "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2, ensure_ascii=False)
 
     logger.info(
-        "Project-level sales model trained: %s with %d samples, %d features with |coef| > 1e-6",
+        "Project-level sales model trained: %s with %d samples, %d selected features",
         model_type, n_samples, len(selected_features),
     )
     return meta

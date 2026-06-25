@@ -17,25 +17,13 @@ logger = logging.getLogger(__name__)
 
 
 CREATOR_FEATURE_COLS = [
+    "creator_market_tier",
     "creator_followers_log",
     "creator_following_follower_ratio",
-    "creator_avg_daily_posts_30d",
-    "creator_reply_engagement_rate",
     "creator_account_age_days_log",
     "creator_has_shop_link",
     "creator_is_nsfw",
     "creator_is_multi_platform",
-    "creator_market_tier_high",
-    "creator_market_tier_mid",
-    "creator_market_tier_low",
-    "creator_content_furry",
-    "creator_content_anime",
-    "creator_content_vtuber",
-    "creator_content_gaming",
-    "creator_content_webcomic",
-    "creator_content_bl",
-    "creator_content_gl",
-    "creator_content_nsfw",
 ]
 
 
