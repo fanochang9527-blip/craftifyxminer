@@ -13,8 +13,9 @@ for mod_name in ("psycopg2", "psycopg2.pool", "psycopg2.extras"):
         sys.modules[mod_name] = MagicMock()
 
 from pipeline.project_sps_model import (
+    CREATOR_ENUM_FEATURES,
     CREATOR_FEATURES,
-    PROJECT_CATEGORICAL_FEATURES,
+    PROJECT_ENUM_FEATURES,
     PROJECT_NUMERIC_FEATURES,
     SPS_MODEL_PROJECT_META_PATH,
     _build_feature_names,
@@ -28,6 +29,7 @@ def _full_row(domain: str = "OC", product_attribute: str = "普货", price: floa
         "domain": domain,
         "product_attribute": product_attribute,
         "price": price,
+        "creator_market_tier": "low",
     }
     for i, col in enumerate(CREATOR_FEATURES):
         row[col] = float(i)
@@ -38,27 +40,24 @@ class TestBuildFeatureVector:
     def test_length(self):
         v = _build_feature_vector(_full_row())
         expected_len = (
-            sum(len(v) for v in PROJECT_CATEGORICAL_FEATURES.values())
+            len(PROJECT_ENUM_FEATURES)
             + len(PROJECT_NUMERIC_FEATURES)
+            + len(CREATOR_ENUM_FEATURES)
             + len(CREATOR_FEATURES)
         )
         assert v.shape == (expected_len,)
 
-    def test_domain_one_hot(self):
+    def test_domain_enum_encoding(self):
         v = _build_feature_vector(_full_row(domain="同人"))
         names = _build_feature_names()
-        oc_idx = names.index("domain_OC")
-        tongren_idx = names.index("domain_同人")
-        assert v[oc_idx] == 0.0
-        assert v[tongren_idx] == 1.0
+        domain_idx = names.index("domain")
+        assert v[domain_idx] == pytest.approx(1.0)
 
-    def test_product_attribute_one_hot(self):
+    def test_product_attribute_enum_encoding(self):
         v = _build_feature_vector(_full_row(product_attribute="带磁"))
         names = _build_feature_names()
-        puhuo_idx = names.index("product_attribute_普货")
-        daci_idx = names.index("product_attribute_带磁")
-        assert v[puhuo_idx] == 0.0
-        assert v[daci_idx] == 1.0
+        attr_idx = names.index("product_attribute")
+        assert v[attr_idx] == pytest.approx(1.0)
 
     def test_numeric_price(self):
         v = _build_feature_vector(_full_row(price=19.99))
@@ -80,6 +79,12 @@ class TestBuildFeatureVector:
         names = _build_feature_names()
         idx = names.index("creator_followers_log")
         assert v[idx] == 0.0
+
+    def test_unknown_enum_value_encoded_as_negative_one(self):
+        v = _build_feature_vector(_full_row(domain="未知领域"))
+        names = _build_feature_names()
+        domain_idx = names.index("domain")
+        assert v[domain_idx] == pytest.approx(-1.0)
 
 
 class TestSalesToSps:

@@ -109,7 +109,11 @@ def _account_age_days(created_at) -> int:
 
 
 def _compute_features_from_profile(item: dict, is_multi_platform: bool = False) -> dict:
-    """从 Apify profile item 计算简化版 creator_features。"""
+    """从 Apify profile item 计算简化版 creator_features。
+
+    内容分类（content_classes）计算逻辑保留，但暂时不入模、不回写 projects 表；
+    creator_content_nsfw 已彻底移除。
+    """
     author = item.get("author") or item
 
     followers = float(author.get("followers") or author.get("followersCount") or 0)
@@ -122,12 +126,12 @@ def _compute_features_from_profile(item: dict, is_multi_platform: bool = False) 
 
     text_for_classification = f"{bio} {website}".lower()
 
-    # 内容分类：基于 bio + website 关键词
+    # 内容分类：基于 bio + website 关键词（保留计算逻辑，但暂不写入 projects）
     content_classes = [k for k, p in _CONTENT_KEYWORDS.items() if p.search(text_for_classification)]
     if not content_classes:
         content_classes = ["anime"]
 
-    # market tier：简化按粉丝数分档
+    # market tier：简化按粉丝数分档，作为一个枚举字段回写
     if followers >= 100000:
         market_tier = "high"
     elif followers >= 10000:
@@ -142,23 +146,13 @@ def _compute_features_from_profile(item: dict, is_multi_platform: bool = False) 
         "creator_bio": bio,
         "creator_followers_log": math.log1p(followers),
         "creator_following_follower_ratio": following / max(followers, 1),
-        "creator_avg_daily_posts_30d": tweets_count / max(account_age_days, 1) * 30,
-        "creator_reply_engagement_rate": 0.0,  # 无推文数据，无法计算
         "creator_account_age_days_log": math.log1p(max(account_age_days, 0)),
         "creator_has_shop_link": bool(_SHOP_KEYWORDS.search(text_for_classification) or website),
         "creator_is_nsfw": bool(_NSFW_KEYWORDS.search(text_for_classification)),
         "creator_is_multi_platform": is_multi_platform,
-        "creator_market_tier_high": market_tier == "high",
-        "creator_market_tier_mid": market_tier == "mid",
-        "creator_market_tier_low": market_tier == "low",
-        "creator_content_furry": "furry" in content_classes,
-        "creator_content_anime": "anime" in content_classes,
-        "creator_content_vtuber": "vtuber" in content_classes,
-        "creator_content_gaming": "gaming" in content_classes,
-        "creator_content_webcomic": "webcomic" in content_classes,
-        "creator_content_bl": "bl" in content_classes,
-        "creator_content_gl": "gl" in content_classes,
-        "creator_content_nsfw": "nsfw" in content_classes,
+        "creator_market_tier": market_tier,
+        # 保留 content_classes 在返回字典中，供后续扩展使用，但不写入 projects
+        "_content_classes": content_classes,
     }
 
 
@@ -368,23 +362,11 @@ def sync_project_creators(project_ids: list[str] | None = None) -> dict:
                         creator_bio = %s,
                         creator_followers_log = %s,
                         creator_following_follower_ratio = %s,
-                        creator_avg_daily_posts_30d = %s,
-                        creator_reply_engagement_rate = %s,
                         creator_account_age_days_log = %s,
                         creator_has_shop_link = %s,
                         creator_is_nsfw = %s,
                         creator_is_multi_platform = %s,
-                        creator_market_tier_high = %s,
-                        creator_market_tier_mid = %s,
-                        creator_market_tier_low = %s,
-                        creator_content_furry = %s,
-                        creator_content_anime = %s,
-                        creator_content_vtuber = %s,
-                        creator_content_gaming = %s,
-                        creator_content_webcomic = %s,
-                        creator_content_bl = %s,
-                        creator_content_gl = %s,
-                        creator_content_nsfw = %s,
+                        creator_market_tier = %s,
                         updated_at = NOW()
                     WHERE project_id = %s
                     """,
@@ -397,23 +379,11 @@ def sync_project_creators(project_ids: list[str] | None = None) -> dict:
                         features["creator_bio"],
                         features["creator_followers_log"],
                         features["creator_following_follower_ratio"],
-                        features["creator_avg_daily_posts_30d"],
-                        features["creator_reply_engagement_rate"],
                         features["creator_account_age_days_log"],
                         features["creator_has_shop_link"],
                         features["creator_is_nsfw"],
                         features["creator_is_multi_platform"],
-                        features["creator_market_tier_high"],
-                        features["creator_market_tier_mid"],
-                        features["creator_market_tier_low"],
-                        features["creator_content_furry"],
-                        features["creator_content_anime"],
-                        features["creator_content_vtuber"],
-                        features["creator_content_gaming"],
-                        features["creator_content_webcomic"],
-                        features["creator_content_bl"],
-                        features["creator_content_gl"],
-                        features["creator_content_nsfw"],
+                        features["creator_market_tier"],
                         project_id,
                     ),
                 )

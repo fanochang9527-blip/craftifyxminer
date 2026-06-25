@@ -666,23 +666,12 @@ CREATE TABLE IF NOT EXISTS projects (
     -- 创作者数值/布尔特征
     creator_followers_log FLOAT,
     creator_following_follower_ratio FLOAT,
-    creator_avg_daily_posts_30d FLOAT,
-    creator_reply_engagement_rate FLOAT,
     creator_account_age_days_log FLOAT,
     creator_has_shop_link BOOLEAN,
     creator_is_nsfw BOOLEAN,
     creator_is_multi_platform BOOLEAN,
-    creator_market_tier_high BOOLEAN,
-    creator_market_tier_mid BOOLEAN,
-    creator_market_tier_low BOOLEAN,
-    creator_content_furry BOOLEAN,
-    creator_content_anime BOOLEAN,
-    creator_content_vtuber BOOLEAN,
-    creator_content_gaming BOOLEAN,
-    creator_content_webcomic BOOLEAN,
-    creator_content_bl BOOLEAN,
-    creator_content_gl BOOLEAN,
-    creator_content_nsfw BOOLEAN,
+    -- 创作者枚举特征：low / mid / high，互斥
+    creator_market_tier TEXT,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
