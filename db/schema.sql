@@ -76,7 +76,12 @@ CREATE TABLE IF NOT EXISTS tweets (
     text TEXT,
     media_urls TEXT[],
     media_types TEXT[],
+    is_retweet BOOLEAN,
+    is_quote BOOLEAN,
+    is_reply BOOLEAN,
+    quoted_tweet_id TEXT,
     interaction_data JSONB,
+    raw_tweet JSONB,
     collected_at TIMESTAMP DEFAULT NOW()
 );
 COMMENT ON TABLE tweets IS '推文/帖子数据表：存储创作者的历史推文，用于计算互动率、传播力等特征';
@@ -91,8 +96,32 @@ COMMENT ON COLUMN tweets.created_at IS '推文发布时间';
 COMMENT ON COLUMN tweets.text IS '推文文本内容';
 COMMENT ON COLUMN tweets.media_urls IS '附件媒体 URL 列表（图片、视频等）';
 COMMENT ON COLUMN tweets.media_types IS '附件媒体类型列表';
+COMMENT ON COLUMN tweets.is_retweet IS '是否为纯转发（retweet）';
+COMMENT ON COLUMN tweets.is_quote IS '是否为引用转发（quote tweet）';
+COMMENT ON COLUMN tweets.is_reply IS '是否为回复';
+COMMENT ON COLUMN tweets.quoted_tweet_id IS '被引用的原推文 ID';
 COMMENT ON COLUMN tweets.interaction_data IS '原始互动数据 JSON（保留扩展字段）';
+COMMENT ON COLUMN tweets.raw_tweet IS 'Apify 返回的完整 tweet 原始 JSON';
 COMMENT ON COLUMN tweets.collected_at IS '数据采集时间';
+
+-- 2.1 creator_raw_profiles (创作者原始 profile 数据)
+CREATE TABLE IF NOT EXISTS creator_raw_profiles (
+    id SERIAL PRIMARY KEY,
+    creator_id INTEGER NOT NULL REFERENCES creators(id) ON DELETE CASCADE,
+    source VARCHAR(50) NOT NULL,
+    raw_profile JSONB NOT NULL,
+    collected_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(creator_id, source)
+);
+CREATE INDEX IF NOT EXISTS idx_creator_raw_profiles_creator
+    ON creator_raw_profiles (creator_id);
+CREATE INDEX IF NOT EXISTS idx_creator_raw_profiles_source
+    ON creator_raw_profiles (source);
+COMMENT ON TABLE creator_raw_profiles IS '创作者原始 profile 数据表：存储各来源抓取到的完整 Apify profile JSON，避免 creators 主表膨胀';
+COMMENT ON COLUMN creator_raw_profiles.creator_id IS '关联创作者 ID（外键）';
+COMMENT ON COLUMN creator_raw_profiles.source IS '数据来源：intake / deep_scrape / dna / follower_refresh';
+COMMENT ON COLUMN creator_raw_profiles.raw_profile IS 'Apify 返回的完整创作者 profile 原始 JSON';
+COMMENT ON COLUMN creator_raw_profiles.collected_at IS '数据采集时间';
 
 -- 3. creator_features (9 维组合特征 + 5 维原始特征)
 CREATE TABLE IF NOT EXISTS creator_features (

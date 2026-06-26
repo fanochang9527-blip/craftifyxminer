@@ -29,6 +29,9 @@ def _make_tweet_item(tweet_id: str, username: str, media_list: list[dict]) -> di
         "viewCount": 100,
         "createdAt": "2024-01-01T00:00:00Z",
         "extendedEntities": {"media": media_list},
+        "isRetweet": False,
+        "isQuote": False,
+        "isReply": False,
     }
 
 
@@ -63,9 +66,12 @@ class TestStoreDeepScrapeResults:
         assert len(insert_calls) == 1
         sql, params = insert_calls[0].args
 
-        # params[8] = media_urls, params[9] = media_types
+        # params[8] = media_urls, params[9] = media_types, params[14] = raw_tweet
         media_urls = params[8]
         media_types = params[9]
+        raw_tweet = params[14]
+        assert raw_tweet is not None
+        assert "id" in raw_tweet
 
         assert media_urls == ["https://pbs.twimg.com/media/photo1.jpg", "https://pbs.twimg.com/media/photo2.jpg"]
         assert media_types == ["photo", "photo"]
@@ -99,9 +105,12 @@ class TestStoreDeepScrapeResults:
 
         media_urls = params[8]
         media_types = params[9]
+        raw_tweet = params[14]
 
         assert media_urls == ["https://pbs.twimg.com/media/video_poster.jpg"]
         assert media_types == ["video"]
+        assert raw_tweet is not None
+        assert "id" in raw_tweet
 
     @patch("pipeline.deep_scrape.get_cursor")
     def test_mixed_media_types(self, mock_get_cursor):
@@ -134,6 +143,7 @@ class TestStoreDeepScrapeResults:
 
         media_urls = params[8]
         media_types = params[9]
+        raw_tweet = params[14]
 
         assert media_urls == [
             "https://pbs.twimg.com/media/photo.jpg",
@@ -141,6 +151,8 @@ class TestStoreDeepScrapeResults:
             "https://pbs.twimg.com/media/video.jpg",
         ]
         assert media_types == ["photo", "animated_gif", "video"]
+        assert raw_tweet is not None
+        assert "id" in raw_tweet
 
     @patch("pipeline.deep_scrape.get_cursor")
     def test_no_media_stores_empty_arrays(self, mock_get_cursor):
@@ -169,9 +181,12 @@ class TestStoreDeepScrapeResults:
 
         media_urls = params[8]
         media_types = params[9]
+        raw_tweet = params[14]
 
         assert media_urls == []
         assert media_types == []
+        assert raw_tweet is not None
+        assert "id" in raw_tweet
 
     @patch("pipeline.deep_scrape.get_cursor")
     def test_fallback_media_url(self, mock_get_cursor):
@@ -201,6 +216,8 @@ class TestStoreDeepScrapeResults:
 
         assert params[8] == ["http://old.url/media.jpg"]
         assert params[9] == ["photo"]
+        assert params[14] is not None
+        assert "id" in params[14]
 
 
 # ---------------------------------------------------------------------------

@@ -546,7 +546,19 @@ def _store_apify_dna_results(items: list[dict]) -> dict[str, list[dict]]:
             if row:
                 updated_creators[row["id"]] = author
 
-    # 把 raw_profile 写入 creators_detail
+    # 保存完整原始 profile 到独立表，避免 creators 主表膨胀
+    for creator_id, author in updated_creators.items():
+        with get_cursor() as cur:
+            cur.execute(
+                """INSERT INTO creator_raw_profiles (creator_id, source, raw_profile)
+                   VALUES (%s, 'dna', %s)
+                   ON CONFLICT (creator_id, source) DO UPDATE SET
+                       raw_profile = EXCLUDED.raw_profile,
+                       collected_at = NOW()""",
+                (creator_id, json.dumps(author, ensure_ascii=False, default=str)),
+            )
+
+    # 把 raw_profile 写入 creators_detail（仅高价值创作者）
     for creator_id, author in updated_creators.items():
         with get_cursor() as cur:
             cur.execute(
@@ -582,9 +594,24 @@ def _upsert_tweets(creator_id: int, tweets: list[dict]) -> int:
             cur.execute(
                 """INSERT INTO tweets
                        (tweet_id, creator_id, likes, retweets, replies, views,
-                        created_at, text, media_urls, media_types)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                   ON CONFLICT (tweet_id) DO NOTHING""",
+                        created_at, text, media_urls, media_types,
+                        is_retweet, is_quote, is_reply, quoted_tweet_id, raw_tweet)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                   ON CONFLICT (tweet_id) DO UPDATE SET
+                       likes = EXCLUDED.likes,
+                       retweets = EXCLUDED.retweets,
+                       replies = EXCLUDED.replies,
+                       views = EXCLUDED.views,
+                       created_at = EXCLUDED.created_at,
+                       text = EXCLUDED.text,
+                       media_urls = EXCLUDED.media_urls,
+                       media_types = EXCLUDED.media_types,
+                       is_retweet = EXCLUDED.is_retweet,
+                       is_quote = EXCLUDED.is_quote,
+                       is_reply = EXCLUDED.is_reply,
+                       quoted_tweet_id = EXCLUDED.quoted_tweet_id,
+                       raw_tweet = EXCLUDED.raw_tweet,
+                       collected_at = NOW()""",
                 (
                     tweet_id,
                     creator_id,
@@ -596,6 +623,11 @@ def _upsert_tweets(creator_id: int, tweets: list[dict]) -> int:
                     tw.get("text") or tw.get("full_text") or "",
                     media_urls or [],
                     media_types or [],
+                    tw.get("isRetweet") if tw.get("isRetweet") is not None else False,
+                    tw.get("isQuote") if tw.get("isQuote") is not None else False,
+                    tw.get("isReply") if tw.get("isReply") is not None else False,
+                    tw.get("quoteId") or None,
+                    json.dumps(tw, ensure_ascii=False, default=str),
                 ),
             )
             if cur.rowcount > 0:

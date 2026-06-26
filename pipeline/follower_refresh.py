@@ -3,6 +3,7 @@
 查询结果同时更新 creators.followers 和 snapshot 表。
 """
 
+import json
 import logging
 
 import yaml
@@ -90,7 +91,12 @@ def _store_follower_refresh_results(items: list[dict]) -> dict:
                        last_follower_refresh_at = NOW()
                    WHERE username = %s
                    RETURNING id, is_seed""",
-                (followers, following, tweets_count, username),
+                (
+                    followers,
+                    following,
+                    tweets_count,
+                    username,
+                ),
             )
             row = cur.fetchone()
             if not row:
@@ -98,6 +104,16 @@ def _store_follower_refresh_results(items: list[dict]) -> dict:
             creator_id = row["id"]
             is_seed = row.get("is_seed")
             updated += 1
+
+            # 保存完整原始 profile 到独立表，避免 creators 主表膨胀
+            cur.execute(
+                """INSERT INTO creator_raw_profiles (creator_id, source, raw_profile)
+                   VALUES (%s, 'follower_refresh', %s)
+                   ON CONFLICT (creator_id, source) DO UPDATE SET
+                       raw_profile = EXCLUDED.raw_profile,
+                       collected_at = NOW()""",
+                (creator_id, json.dumps(author, ensure_ascii=False, default=str)),
+            )
 
         # Snapshot 写入（独立事务，幂等兜底）
         record_snapshot(
