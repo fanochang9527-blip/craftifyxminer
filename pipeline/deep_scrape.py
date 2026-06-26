@@ -3,6 +3,7 @@
 批量触发 Apify Deep Scrape Actor (每批 50 人), 数据回写 creators + tweets 表。
 """
 
+import json
 import logging
 from datetime import date
 
@@ -105,6 +106,16 @@ def _store_deep_scrape_results(items: list[dict]) -> dict:
             profiles_updated += 1
             synced_creator_profiles[creator_id] = author
 
+            # 保存完整原始 profile 到独立表，避免 creators 主表膨胀
+            cur.execute(
+                """INSERT INTO creator_raw_profiles (creator_id, source, raw_profile)
+                   VALUES (%s, 'deep_scrape', %s)
+                   ON CONFLICT (creator_id, source) DO UPDATE SET
+                       raw_profile = EXCLUDED.raw_profile,
+                       collected_at = NOW()""",
+                (creator_id, json.dumps(author, ensure_ascii=False, default=str)),
+            )
+
             # 追加：记录 snapshot（同一事务）
             cur.execute(
                 "SELECT is_seed, bd_decision FROM creators WHERE id = %s",
@@ -152,9 +163,24 @@ def _store_deep_scrape_results(items: list[dict]) -> dict:
                 cur.execute(
                     """INSERT INTO tweets
                            (tweet_id, creator_id, likes, retweets, replies, views,
-                            created_at, text, media_urls, media_types)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                       ON CONFLICT (tweet_id) DO NOTHING""",
+                            created_at, text, media_urls, media_types,
+                            is_retweet, is_quote, is_reply, quoted_tweet_id, raw_tweet)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                       ON CONFLICT (tweet_id) DO UPDATE SET
+                           likes = EXCLUDED.likes,
+                           retweets = EXCLUDED.retweets,
+                           replies = EXCLUDED.replies,
+                           views = EXCLUDED.views,
+                           created_at = EXCLUDED.created_at,
+                           text = EXCLUDED.text,
+                           media_urls = EXCLUDED.media_urls,
+                           media_types = EXCLUDED.media_types,
+                           is_retweet = EXCLUDED.is_retweet,
+                           is_quote = EXCLUDED.is_quote,
+                           is_reply = EXCLUDED.is_reply,
+                           quoted_tweet_id = EXCLUDED.quoted_tweet_id,
+                           raw_tweet = EXCLUDED.raw_tweet,
+                           collected_at = NOW()""",
                     (
                         tweet_id,
                         creator_id,
@@ -166,6 +192,11 @@ def _store_deep_scrape_results(items: list[dict]) -> dict:
                         tw.get("text") or tw.get("full_text") or "",
                         media_urls or [],
                         media_types or [],
+                        tw.get("isRetweet") if tw.get("isRetweet") is not None else False,
+                        tw.get("isQuote") if tw.get("isQuote") is not None else False,
+                        tw.get("isReply") if tw.get("isReply") is not None else False,
+                        tw.get("quoteId") or None,
+                        json.dumps(tw, ensure_ascii=False, default=str),
                     ),
                 )
                 tweets_inserted += 1

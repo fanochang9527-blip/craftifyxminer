@@ -1,6 +1,7 @@
 """公共数据入库 + 规则/AI 过滤 — 供 webhook 和 discovery 同步模式共用。"""
 
 import asyncio
+import json
 import logging
 
 from apify_client import ApifyClient
@@ -101,19 +102,38 @@ def store_dataset_items(items: list[dict]) -> dict:
                        followers = EXCLUDED.followers,
                        following = EXCLUDED.following,
                        tweets_count = EXCLUDED.tweets_count
-                   RETURNING (xmax = 0) AS is_insert""",
-                (username, bio, website, followers, following, tweets_count, username),
+                   RETURNING id, (xmax = 0) AS is_insert""",
+                (
+                    username,
+                    bio,
+                    website,
+                    followers,
+                    following,
+                    tweets_count,
+                    username,
+                ),
             )
             row = cur.fetchone()
+            creator_id = row["id"]
             if row and row["is_insert"]:
                 inserted += 1
             else:
                 updated += 1
 
+            # 保存完整原始 profile，避免 creators 主表膨胀
+            cur.execute(
+                """INSERT INTO creator_raw_profiles (creator_id, source, raw_profile)
+                   VALUES (%s, 'intake', %s)
+                   ON CONFLICT (creator_id, source) DO UPDATE SET
+                       raw_profile = EXCLUDED.raw_profile,
+                       collected_at = NOW()""",
+                (creator_id, json.dumps(item, ensure_ascii=False, default=str)),
+            )
+
             # 追加 snapshot（同一事务）
             cur.execute(
-                "SELECT id, is_seed FROM creators WHERE platform_account_id = %s",
-                (username,),
+                "SELECT is_seed FROM creators WHERE id = %s",
+                (creator_id,),
             )
             creator_info = cur.fetchone()
             if creator_info and followers > 0:
@@ -132,7 +152,7 @@ def store_dataset_items(items: list[dict]) -> dict:
                         tweets_count = EXCLUDED.tweets_count,
                         source = EXCLUDED.source
                     """,
-                    (creator_info["id"], followers, following, tweets_count),
+                    (creator_id, followers, following, tweets_count),
                 )
 
     graph_inserted = _store_graph_relations(relations)
