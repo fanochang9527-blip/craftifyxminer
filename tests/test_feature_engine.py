@@ -13,14 +13,18 @@ import pytest
 from pipeline.feature_engine import (
     calc_audience,
     calc_audience_segment,
+    calc_audience_segment_booleans,
     calc_character_consistency,
     calc_community,
     calc_conversation_rate,
     calc_engagement,
     calc_fanart_ratio,
+    calc_mention_rate,
     calc_monetization,
+    calc_monetization_signal,
     calc_monthly_engagement_base,
     calc_posting,
+    calc_retweet_rate,
     calc_social_engagement_rate,
     calc_virality,
     calc_virality_raw,
@@ -197,9 +201,15 @@ class TestAudienceSegment:
         assert score == 80.0
 
     def test_multi_platform_website(self):
-        score, seg = calc_audience_segment("Artist", "https://booth.pm/123", "user4")
+        score, seg = calc_audience_segment("Artist", "https://linktr.ee/artist", "user4")
         assert seg == "multi_platform"
         assert score == 80.0
+
+    def test_monetization_domain_is_mainstream_segment(self):
+        # booth.pm 属于店铺平台，不再是 multi_platform；受众分段回到 mainstream
+        score, seg = calc_audience_segment("Artist", "https://booth.pm/123", "user4")
+        assert seg == "mainstream"
+        assert score == 50.0
 
     def test_mainstream_no_signals(self):
         score, seg = calc_audience_segment("Just a normal bio", "", "user5")
@@ -249,8 +259,8 @@ class TestSocialEngagementRate:
     def test_normal_rate(self):
         tweets = [_make_tweet(likes=10, retweets=5) for _ in range(2)]
         rate = calc_social_engagement_rate(tweets, 1000)
-        # avg_likes=10, avg_rts=5, rate = 15/1000*100 = 1.5
-        assert rate == pytest.approx(1.5)
+        # avg_likes=10, avg_rts=5, raw rate = 15/1000 = 0.015
+        assert rate == pytest.approx(0.015)
 
 
 class TestConversationRate:
@@ -261,8 +271,8 @@ class TestConversationRate:
     def test_normal_rate(self):
         tweets = [_make_tweet(replies=10) for _ in range(2)]
         rate = calc_conversation_rate(tweets, 1000)
-        # avg_replies=10, rate = 10/1000*100 = 1.0
-        assert rate == pytest.approx(1.0)
+        # avg_replies=10, raw rate = 10/1000 = 0.01
+        assert rate == pytest.approx(0.01)
 
 
 class TestFanartRatio:
@@ -271,11 +281,33 @@ class TestFanartRatio:
 
     def test_all_fanart(self):
         tweets = [_make_tweet(text="#fanart art1"), _make_tweet(text="fanart art2")]
-        assert calc_fanart_ratio(tweets) == 100.0
+        assert calc_fanart_ratio(tweets) == 1.0
 
     def test_half_fanart(self):
         tweets = [_make_tweet(text="#fanart art1"), _make_tweet(text="normal tweet")]
-        assert calc_fanart_ratio(tweets) == 50.0
+        assert calc_fanart_ratio(tweets) == 0.5
+
+
+class TestMentionRate:
+    def test_empty_tweets(self):
+        assert calc_mention_rate([]) == 0.0
+
+    def test_half_mentions(self):
+        tweets = [_make_tweet(text="hello @user"), _make_tweet(text="no mention")]
+        assert calc_mention_rate(tweets) == 0.5
+
+    def test_no_mentions(self):
+        tweets = [_make_tweet(text="no mention"), _make_tweet(text="also none")]
+        assert calc_mention_rate(tweets) == 0.0
+
+
+class TestRetweetRate:
+    def test_empty_tweets(self):
+        assert calc_retweet_rate([]) == 0.0
+
+    def test_average(self):
+        tweets = [_make_tweet(retweets=10), _make_tweet(retweets=20)]
+        assert calc_retweet_rate(tweets) == 15.0
 
 
 class TestViralityRaw:
@@ -293,4 +325,38 @@ class TestViralityRaw:
 class TestMonthlyEngagementBase:
     def test_returns_monthly_avg(self):
         assert calc_monthly_engagement_base(42.0) == 42.0
+
+
+class TestAudienceSegmentBooleans:
+    def test_nsfw_detection(self):
+        score, segment = calc_audience_segment("NSFW artist 🔞", "", "user")
+        is_nsfw, _ = calc_audience_segment_booleans("NSFW artist 🔞", "", "user")
+        assert segment == "nsfw"
+        assert is_nsfw is True
+
+    def test_multi_platform_and_monetization_are_separated(self):
+        # 只有 shop 链接：monetization=True, multi_platform=False
+        bio_shop = "commissions open https://ko-fi.com/artist"
+        is_nsfw, is_multi = calc_audience_segment_booleans(bio_shop, "", "user")
+        has_monetization = calc_monetization_signal(bio_shop, "")
+        assert is_multi is False
+        assert has_monetization is True
+
+        # 只有社交聚合链接：monetization=False, multi_platform=True
+        bio_social = "find me on https://linktr.ee/artist"
+        is_nsfw2, is_multi2 = calc_audience_segment_booleans(bio_social, "", "user")
+        has_monetization2 = calc_monetization_signal(bio_social, "")
+        assert is_multi2 is True
+        assert has_monetization2 is False
+
+    def test_multi_platform_detects_unknown_external_url(self):
+        # 未知但非 X/非店铺/非邮箱的外部链接也应被识别
+        bio = "portfolio: https://artist.portfolio.site"
+        _, is_multi = calc_audience_segment_booleans(bio, "", "user")
+        assert is_multi is True
+
+    def test_x_and_email_do_not_count_as_multi_platform(self):
+        bio = "contact me at artist@gmail.com or x.com/artist"
+        _, is_multi = calc_audience_segment_booleans(bio, "", "user")
+        assert is_multi is False
 

@@ -123,7 +123,7 @@ COMMENT ON COLUMN creator_raw_profiles.source IS '数据来源：intake / deep_s
 COMMENT ON COLUMN creator_raw_profiles.raw_profile IS 'Apify 返回的完整创作者 profile 原始 JSON';
 COMMENT ON COLUMN creator_raw_profiles.collected_at IS '数据采集时间';
 
--- 3. creator_features (9 维组合特征 + 5 维原始特征)
+-- 3. creator_features (9 维组合特征 + 5 维原始特征 + 2 维受众分段布尔特征 + 1 维变现信号)
 CREATE TABLE IF NOT EXISTS creator_features (
     id SERIAL PRIMARY KEY,
     creator_id INTEGER REFERENCES creators(id) UNIQUE,
@@ -134,14 +134,19 @@ CREATE TABLE IF NOT EXISTS creator_features (
     growth_score FLOAT,
     posting_score FLOAT,
     monetization_score FLOAT,
+    has_monetization_signal BOOLEAN DEFAULT false,
     character_consistency FLOAT,
     community_score FLOAT,
     audience_segment_score FLOAT,
+    audience_is_nsfw BOOLEAN,
+    audience_is_multi_platform BOOLEAN,
     growth_is_real BOOLEAN DEFAULT false,
     -- 原始特征（用于 ML V2 实验组）
     social_engagement_rate FLOAT,
     conversation_rate FLOAT,
     fanart_ratio FLOAT,
+    mention_rate FLOAT,
+    retweet_rate FLOAT,
     virality_raw_ratio FLOAT,
     monthly_engagement_base FLOAT,
     -- DNA 特征（用于 SPS Lasso 模型）
@@ -165,7 +170,7 @@ CREATE TABLE IF NOT EXISTS creator_features (
     content_gl FLOAT,
     content_nsfw FLOAT
 );
-COMMENT ON TABLE creator_features IS '创作者特征表：存储 9 维组合评分 + 5 维原始特征，由 pipeline/feature_engine 计算';
+COMMENT ON TABLE creator_features IS '创作者特征表：存储 9 维组合评分 + 5 维原始特征 + 受众分段/变现布尔信号，由 pipeline/feature_engine 计算';
 COMMENT ON COLUMN creator_features.id IS '自增主键';
 COMMENT ON COLUMN creator_features.creator_id IS '关联创作者 ID（外键，唯一）';
 COMMENT ON COLUMN creator_features.calculated_at IS '特征计算时间';
@@ -175,12 +180,17 @@ COMMENT ON COLUMN creator_features.virality_score IS '传播力评分：top3 爆
 COMMENT ON COLUMN creator_features.growth_score IS '增长评分：基于粉丝历史快照的月环比/月净增长（来源：feature_engine.calc_growth / growth_monitor）';
 COMMENT ON COLUMN creator_features.posting_score IS '发帖活跃度评分：基于近 30 天实际发帖数估算（来源：feature_engine.calc_posting）';
 COMMENT ON COLUMN creator_features.monetization_score IS '变现潜力评分：基于 bio/website 中的电商关键词规则匹配（来源：feature_engine.calc_monetization / bio_rule_filter）';
+COMMENT ON COLUMN creator_features.has_monetization_signal IS '高置信变现/店铺链接信号：bio/website 中出现 Level 1 Link DNA 店铺平台时为 true（来源：feature_engine.calc_monetization_signal）';
 COMMENT ON COLUMN creator_features.character_consistency IS '角色一致性评分：基于图片 media_url 的域名集中度（来源：feature_engine.calc_character_consistency）';
 COMMENT ON COLUMN creator_features.community_score IS '社区影响力评分：基于 fanart 转推权重及 mention 互动（来源：feature_engine.calc_community）';
 COMMENT ON COLUMN creator_features.audience_segment_score IS '受众分段评分：multi_platform(80) / mainstream(50) / nsfw(20)（来源：feature_engine.calc_audience_segment）';
-COMMENT ON COLUMN creator_features.social_engagement_rate IS '社交互动率：(avg_likes + avg_retweets) / followers * 100（来源：feature_engine.calc_social_engagement_rate）';
-COMMENT ON COLUMN creator_features.conversation_rate IS '对话率：avg_replies / followers * 100（来源：feature_engine.calc_conversation_rate）';
-COMMENT ON COLUMN creator_features.fanart_ratio IS '同人作品占比：含 fanart 关键词的推文占比（来源：feature_engine.calc_fanart_ratio）';
+COMMENT ON COLUMN creator_features.audience_is_nsfw IS '受众分段：是否为成人向/NSFW 创作者（来源：feature_engine.calc_audience_segment_booleans）';
+COMMENT ON COLUMN creator_features.audience_is_multi_platform IS '受众分段：是否在 bio/website 中露出多平台链接（来源：feature_engine.calc_audience_segment_booleans）';
+COMMENT ON COLUMN creator_features.social_engagement_rate IS '社交互动率：(avg_likes + avg_retweets) / followers，原始比率（来源：feature_engine.calc_social_engagement_rate）';
+COMMENT ON COLUMN creator_features.conversation_rate IS '对话率：avg_replies / followers，原始比率（来源：feature_engine.calc_conversation_rate）';
+COMMENT ON COLUMN creator_features.fanart_ratio IS '同人作品占比：含 fanart 关键词的推文占比，原始比率（来源：feature_engine.calc_fanart_ratio）';
+COMMENT ON COLUMN creator_features.mention_rate IS '提及互动率：含 @ mention 的推文占比，原始比率（来源：feature_engine.calc_mention_rate）';
+COMMENT ON COLUMN creator_features.retweet_rate IS '平均转发数：单条推文的平均 retweets（来源：feature_engine.calc_retweet_rate）';
 COMMENT ON COLUMN creator_features.virality_raw_ratio IS '原始传播比率：top3_avg / monthly_avg，不封顶（来源：feature_engine.calc_virality_raw）';
 COMMENT ON COLUMN creator_features.monthly_engagement_base IS '月度互动基数：保留 monthly_avg 绝对值（来源：feature_engine.calc_monthly_engagement_base）';
 
