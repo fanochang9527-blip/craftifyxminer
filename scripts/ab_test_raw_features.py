@@ -24,6 +24,7 @@ from collections import defaultdict
 import numpy as np
 from sklearn.dummy import DummyClassifier
 from sklearn.linear_model import LogisticRegression, Ridge
+from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import (
     accuracy_score,
     f1_score,
@@ -39,13 +40,16 @@ from config.settings import CREATOR_TYPES, SELLABILITY_LABEL_SALES_THRESHOLD
 from db.connection import fetch_all
 from pipeline.feature_engine import (
     calc_audience,
-    calc_audience_segment,
+    calc_audience_segment_booleans,
     # calc_character_consistency,
     calc_conversation_rate,
     calc_fanart_ratio,
+    calc_mention_rate,
     calc_monetization,
+    calc_monetization_signal,
     calc_monthly_engagement_base,
     calc_posting,
+    calc_retweet_rate,
     calc_social_engagement_rate,
     calc_virality,
     calc_virality_raw,
@@ -60,22 +64,29 @@ logger = logging.getLogger(__name__)
 
 V1_SELLABILITY_COLS = [
     "audience_score",
-    "engagement_score",
-    "monetization_score",
-    "growth_score",
-    # "character_consistency",
-    "community_score",
-    "audience_segment_score",
-]
-
-V2_SELLABILITY_COLS = [
-    "audience_score",
-    "monetization_score",
+    "has_monetization_signal",
+    # "growth_score",
     # "character_consistency",
     "social_engagement_rate",
     "conversation_rate",
     "fanart_ratio",
-    "audience_segment_score",
+    "mention_rate",
+    "retweet_rate",
+    "audience_is_nsfw",
+    "audience_is_multi_platform",
+]
+
+V2_SELLABILITY_COLS = [
+    "audience_score",
+    "has_monetization_signal",
+    # "character_consistency",
+    "social_engagement_rate",
+    "conversation_rate",
+    "fanart_ratio",
+    "mention_rate",
+    "retweet_rate",
+    "audience_is_nsfw",
+    "audience_is_multi_platform",
 ]
 
 V1_SPS_COLS = [
@@ -133,24 +144,29 @@ def _compute_raw_features_for_creator(creator_id: int) -> dict:
     top3_avg = sum(sorted_eng[:3]) / min(len(sorted_eng), 3) if sorted_eng else 0
     monthly_avg = sum(engagement_vals) / len(engagement_vals) if engagement_vals else 0
 
-    audience_segment_score, _ = calc_audience_segment(
+    audience_is_nsfw, audience_is_multi_platform = calc_audience_segment_booleans(
         bio, website, creator.get("username") or ""
     )
 
     return {
         "audience_score": calc_audience(followers, creator.get("following") or 0),
-        "engagement_score": 0.0,  # V1 only, not used in V2
+        "engagement_score": 0.0,  # 旧 V1 字段，当前生产模型已不再使用
         "virality_score": calc_virality(top3_avg, monthly_avg),
         "posting_score": calc_posting(tweets),
-        "monetization_score": calc_monetization(bio, website),
+        "monetization_score": calc_monetization(bio, website),  # 旧字段，SPS 仍用
+        "has_monetization_signal": calc_monetization_signal(bio, website),
         "growth_score": 50.0,
         # "character_consistency": calc_character_consistency(tweets),
-        "community_score": 0.0,  # V1 only, not used in V2
-        "audience_segment_score": audience_segment_score,
-        # V2 raw features
+        "community_score": 0.0,  # 旧字段，当前生产模型已不再使用
+        "audience_segment_score": 0.0,  # 旧字段，SPS 仍用
+        "audience_is_nsfw": audience_is_nsfw,
+        "audience_is_multi_platform": audience_is_multi_platform,
+        # V2 / 社区原始特征
         "social_engagement_rate": calc_social_engagement_rate(tweets, followers),
         "conversation_rate": calc_conversation_rate(tweets, followers),
         "fanart_ratio": calc_fanart_ratio(tweets),
+        "mention_rate": calc_mention_rate(tweets),
+        "retweet_rate": calc_retweet_rate(tweets),
         "virality_raw_ratio": calc_virality_raw(top3_avg, monthly_avg),
         "monthly_engagement_base": calc_monthly_engagement_base(monthly_avg),
         "creator_type": creator.get("creator_type_auto") or "unknown",
@@ -247,6 +263,18 @@ def evaluate_sps(y_true, y_pred) -> dict:
 # AB Test 主逻辑
 # ------------------------------------------------------------------
 
+def _scale_sellability_features(X_train: np.ndarray, X_test: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """对 sellability 连续特征做 StandardScaler，布尔/ordinal 保持不变。"""
+    categorical = {"has_monetization_signal", "audience_is_nsfw", "audience_is_multi_platform", "creator_type"}
+    continuous_idx = [i for i, c in enumerate(V1_SELLABILITY_COLS) if c not in categorical]
+    scaler = StandardScaler()
+    X_train_scaled = X_train.copy()
+    X_test_scaled = X_test.copy()
+    X_train_scaled[:, continuous_idx] = scaler.fit_transform(X_train[:, continuous_idx])
+    X_test_scaled[:, continuous_idx] = scaler.transform(X_test[:, continuous_idx])
+    return X_train_scaled, X_test_scaled
+
+
 def ab_test_sellability(n_splits: int = 5):
     logger.info("=" * 70)
     logger.info("Sellability Model AB Test: V1 (组合特征) vs V2 (原始拆分特征)")
@@ -287,6 +315,7 @@ def ab_test_sellability(n_splits: int = 5):
             y_train, y_test = y[train_idx], y[test_idx]
             w_train = w[train_idx]
 
+            X_train, X_test = _scale_sellability_features(X_train, X_test)
             model = train_sellability_model(X_train, y_train, w_train)
             if hasattr(model, "predict_proba"):
                 y_prob = model.predict_proba(X_test)[:, 1]

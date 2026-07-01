@@ -101,11 +101,21 @@ def calc_sellability(features: dict, creator_type: str) -> float:
     except Exception:
         logger.debug("Sellability model prediction failed — using heuristic fallback")
 
-    # 冷启动启发式：偏重变现/互动/社区
-    monetization = float(features.get("monetization_score") or 0)
-    engagement = float(features.get("engagement_score") or 0)
-    community = float(features.get("community_score") or 0)
-    heuristic = monetization * 0.45 + engagement * 0.30 + community * 0.25
+    # 冷启动启发式：数据库已改为原始比率，fallback 里临时乘 100 保持原有权重尺度
+    monetization = 45.0 if features.get("has_monetization_signal") else 0.0
+    social = float(features.get("social_engagement_rate") or 0) * 100.0
+    conversation = float(features.get("conversation_rate") or 0) * 100.0
+    fanart = float(features.get("fanart_ratio") or 0) * 100.0
+    mention = float(features.get("mention_rate") or 0) * 100.0
+    retweet = min(float(features.get("retweet_rate") or 0), 50.0)
+    heuristic = (
+        monetization
+        + social * 0.20
+        + conversation * 0.10
+        + fanart * 0.10
+        + mention * 0.10
+        + retweet * 0.10
+    )
     return round(max(0.0, min(100.0, heuristic)), 2)
 
 

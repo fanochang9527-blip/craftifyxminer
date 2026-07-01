@@ -26,6 +26,7 @@ from sklearn.metrics import (
     recall_score,
 )
 from sklearn.model_selection import KFold, StratifiedKFold
+from sklearn.preprocessing import StandardScaler
 from xgboost import XGBRegressor
 
 from config.settings import CREATOR_TYPES
@@ -59,12 +60,16 @@ SPS_FEATURE_COLS = [
 
 SELLABILITY_FEATURE_COLS = [
     "audience_score",
-    "engagement_score",
-    "monetization_score",
-    "growth_score",
+    "has_monetization_signal",
+    # "growth_score",
     # "character_consistency",
-    "community_score",
-    "audience_segment_score",
+    "social_engagement_rate",
+    "conversation_rate",
+    "fanart_ratio",
+    "mention_rate",
+    "retweet_rate",
+    "audience_is_nsfw",
+    "audience_is_multi_platform",
 ]
 
 
@@ -81,6 +86,18 @@ def _print_divider(title: str) -> None:
     print("=" * 60)
 
 
+def _scale_continuous(X_train: np.ndarray, X_test: np.ndarray, cols: list[str]) -> tuple[np.ndarray, np.ndarray]:
+    """对连续特征做 StandardScaler，布尔/ordinal 特征保持原值。"""
+    categorical = {"has_monetization_signal", "audience_is_nsfw", "audience_is_multi_platform", "creator_type"}
+    continuous_idx = [i for i, c in enumerate(cols) if c not in categorical]
+    scaler = StandardScaler()
+    X_train_scaled = X_train.copy()
+    X_test_scaled = X_test.copy()
+    X_train_scaled[:, continuous_idx] = scaler.fit_transform(X_train[:, continuous_idx])
+    X_test_scaled[:, continuous_idx] = scaler.transform(X_test[:, continuous_idx])
+    return X_train_scaled, X_test_scaled
+
+
 def cv_sellability() -> None:
     rows, _weights = _load_training_rows()
     y = np.array([int(r["y"]) for r in rows])
@@ -95,6 +112,7 @@ def cv_sellability() -> None:
         for train_idx, test_idx in skf.split(X, y):
             X_train, X_test = X[train_idx], X[test_idx]
             y_train, y_test = y[train_idx], y[test_idx]
+            X_train, X_test = _scale_continuous(X_train, X_test, cols)
             model = LogisticRegression(max_iter=1000, class_weight="balanced")
             model.fit(X_train, y_train)
             y_pred = model.predict(X_test)

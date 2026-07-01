@@ -5,6 +5,7 @@
 
 import logging
 import math
+import re
 from collections import Counter
 from urllib.parse import urlparse
 
@@ -112,8 +113,9 @@ def calc_virality(top3_avg: float, monthly_avg: float) -> float:
 
 
 def calc_social_engagement_rate(tweets: list[dict], followers: int) -> float:
-    """(avg_likes + avg_retweets) / followers * 100
+    """(avg_likes + avg_retweets) / followers
 
+    原始比率，不乘以 100；模型训练时由 StandardScaler 统一标准化。
     反映内容传播力——粉丝对内容的被动认可（点赞、转发）。
     """
     if followers <= 0 or not tweets:
@@ -122,23 +124,27 @@ def calc_social_engagement_rate(tweets: list[dict], followers: int) -> float:
     total_rts = sum(float(tw.get("retweets") or 0) for tw in tweets)
     avg_likes = total_likes / len(tweets)
     avg_rts = total_rts / len(tweets)
-    return (avg_likes + avg_rts) / followers * 100.0
+    return (avg_likes + avg_rts) / followers
 
 
 def calc_conversation_rate(tweets: list[dict], followers: int) -> float:
-    """avg_replies / followers * 100
+    """avg_replies / followers
 
+    原始比率，不乘以 100；模型训练时由 StandardScaler 统一标准化。
     反映作者与粉丝的深度互动率——粉丝愿意在帖子下与作者对话。
     """
     if followers <= 0 or not tweets:
         return 0.0
     total_replies = sum(float(tw.get("replies") or 0) for tw in tweets)
     avg_replies = total_replies / len(tweets)
-    return avg_replies / followers * 100.0
+    return avg_replies / followers
 
 
 def calc_fanart_ratio(tweets: list[dict]) -> float:
-    """fanart_tweets / total_tweets * 100"""
+    """fanart_tweets / total_tweets
+
+    原始比率，不乘以 100；模型训练时由 StandardScaler 统一标准化。
+    """
     if not tweets:
         return 0.0
     fanart_count = 0
@@ -146,7 +152,30 @@ def calc_fanart_ratio(tweets: list[dict]) -> float:
         text = (tw.get("text") or "").lower()
         if "fanart" in text or "#fanart" in text or "fan art" in text:
             fanart_count += 1
-    return fanart_count / len(tweets) * 100.0
+    return fanart_count / len(tweets)
+
+
+def calc_mention_rate(tweets: list[dict]) -> float:
+    """含 @ mention 的推文占比
+
+    原始比率，不乘以 100；模型训练时由 StandardScaler 统一标准化。
+    反映作者与粉丝的直接互动意愿，替代 community_score 中的人工权重。
+    """
+    if not tweets:
+        return 0.0
+    mention_count = sum(1 for tw in tweets if "@" in (tw.get("text") or ""))
+    return mention_count / len(tweets)
+
+
+def calc_retweet_rate(tweets: list[dict]) -> float:
+    """avg_retweets per tweet
+
+    反映推文被粉丝自发传播的平均水平，替代 community_score 中的 rt * 0.1 权重。
+    """
+    if not tweets:
+        return 0.0
+    total_rts = sum(float(tw.get("retweets") or 0) for tw in tweets)
+    return total_rts / len(tweets)
 
 
 def calc_virality_raw(top3_avg: float, monthly_avg: float) -> float:
@@ -208,6 +237,15 @@ def calc_monetization(bio: str, website: str) -> float:
     return 0.0
 
 
+def calc_monetization_signal(bio: str, website: str) -> bool:
+    """高置信变现/店铺链接信号。
+
+    bio/website 中出现店铺/支付平台域名（如 booth.pm、etsy、gumroad、ko-fi、patreon 等）时返回 True。
+    与 audience_is_multi_platform 使用的社交/聚合链接域名互不重叠，避免共线。
+    """
+    return _has_monetization_domain(bio, website)
+
+
 def calc_growth(creator_id: int, is_seed: bool = False) -> float:
     """Growth score — delegates to growth_monitor."""
     from pipeline.growth_monitor import calc_growth as _calc
@@ -236,14 +274,88 @@ def calc_character_consistency(tweets: list[dict]) -> float:
     return min(top_ratio * 100.0, 100.0)
 
 
+# 店铺/支付平台域名：用于 has_monetization_signal
+_MONETIZATION_DOMAINS: tuple[str, ...] = (
+    "booth.pm",
+    "etsy.com",
+    "gumroad.com",
+    "ko-fi.com",
+    "patreon.com",
+    "paypal.me",
+    "fanbox.cc",
+    "skeb.jp",
+    "buymeacoffee.com",
+    "redbubble.com",
+    "teespring.com",
+    "store.steampowered.com",
+    "amazon.com",
+)
+
+# 多平台/社交聚合链接域名：用于 audience_is_multi_platform
 _MULTI_PLATFORM_DOMAINS: tuple[str, ...] = (
     "instagram.com", "twitch.tv", "youtube.com", "pixiv.net",
-    "booth.pm", "etsy.com", "patreon.com", "fanbox.cc",
-    "skeb.jp", "artstation.com", "tiktok.com", "linkedin.com",
+    "artstation.com", "tiktok.com", "linkedin.com",
     "behance.net", "discord.gg", "reddit.com", "carrd.co",
-    "ko-fi.com", "buymeacoffee.com", "linktr.ee", "lit.link",
-    "taplink.cc", "toyhou.se", "newgrounds.com", "furaffinity.net",
+    "linktr.ee", "lit.link", "beacons.ai", "taplink.cc",
+    "toyhou.se", "newgrounds.com", "furaffinity.net",
+    "bsky.app", "threads.net", "naver.com", "fantrie.com",
+    "note.com", "ci-en.net",
 )
+
+# 邮箱域名：audience_is_multi_platform 应排除
+_EMAIL_DOMAINS: tuple[str, ...] = (
+    "gmail.com", "yahoo.com", "outlook.com", "hotmail.com", "protonmail.com",
+    "mail.ru", "yandex.ru", "qq.com", "163.com", "126.com",
+)
+
+# X/Twitter 域名：audience_is_multi_platform 应排除
+_X_DOMAINS: tuple[str, ...] = ("x.com", "twitter.com", "t.co")
+
+
+def _is_nsfw(bio: str, username: str) -> bool:
+    bio_text = bio or ""
+    username_text = username or ""
+    combined_lower = (bio_text + " " + username_text).lower()
+    return "nsfw" in combined_lower or "🔞" in bio_text or "🔞" in username_text
+
+
+def _extract_url_domains(text: str) -> set[str]:
+    """从文本中提取 http(s) URL 的域名。"""
+    if not text:
+        return set()
+    text = text.lower()
+    matches = re.findall(r'https?://([^\s/"<>]+)', text)
+    domains = set()
+    for item in matches:
+        domain = item.split('/')[0]
+        if domain.startswith('www.'):
+            domain = domain[4:]
+        domains.add(domain)
+    return domains
+
+
+def _is_multi_platform(bio: str, website: str) -> bool:
+    """bio/website 中是否出现除 X/Twitter、店铺、邮箱以外的外部平台/网站链接。
+
+    逻辑：
+    1. 匹配已知多平台域名（ Instagram、YouTube、Pixiv、linktr.ee、naver 等）。
+    2. 对显式 http(s) 链接提取域名，排除 X/Twitter、店铺、邮箱后，若仍有剩余域名也判为 True。
+    """
+    all_text = ((bio or "") + " " + (website or "")).lower()
+
+    # 1) 已知多平台域名子串匹配
+    if any(d in all_text for d in _MULTI_PLATFORM_DOMAINS):
+        return True
+
+    # 2) 显式 URL 域名提取并排除 X/店铺/邮箱
+    domains = _extract_url_domains(bio) | _extract_url_domains(website)
+    excluded = set(_X_DOMAINS) | set(_MONETIZATION_DOMAINS) | set(_EMAIL_DOMAINS)
+    return any(d not in excluded for d in domains)
+
+
+def _has_monetization_domain(bio: str, website: str) -> bool:
+    all_text = ((bio or "") + " " + (website or "")).lower()
+    return any(d in all_text for d in _MONETIZATION_DOMAINS)
 
 
 def calc_audience_segment(bio: str, website: str, username: str) -> tuple[float, str]:
@@ -255,21 +367,20 @@ def calc_audience_segment(bio: str, website: str, username: str) -> tuple[float,
         - mainstream:     50.0
         - nsfw:           20.0
     """
-    bio_text = bio or ""
-    username_text = username or ""
-    combined_lower = (bio_text + " " + username_text).lower()
-
-    # 优先级 1: 成人向（NSFW 或 🔞）
-    if "nsfw" in combined_lower or "🔞" in bio_text or "🔞" in username_text:
+    if _is_nsfw(bio, username):
         return 20.0, "nsfw"
-
-    # 优先级 2: 多平台（bio / website 中包含其他平台链接）
-    all_text = (bio_text + " " + (website or "")).lower()
-    if any(d in all_text for d in _MULTI_PLATFORM_DOMAINS):
+    if _is_multi_platform(bio, website):
         return 80.0, "multi_platform"
-
-    # 默认: 正常销量创作者
     return 50.0, "mainstream"
+
+
+def calc_audience_segment_booleans(bio: str, website: str, username: str) -> tuple[bool, bool]:
+    """返回受众分段的两个布尔特征：
+
+    Returns:
+        (is_nsfw, is_multi_platform)
+    """
+    return _is_nsfw(bio, username), _is_multi_platform(bio, website)
 
 
 def calc_community(tweets: list[dict], max_community: int = 100) -> float:
@@ -327,10 +438,16 @@ def compute_features_for_creator(creator_id: int) -> dict | None:
     monthly_avg = sum(engagement_vals) / len(engagement_vals) if engagement_vals else 0
 
     audience_segment_score, segment = calc_audience_segment(bio, website, creator.get("username") or "")
+    audience_is_nsfw, audience_is_multi_platform = calc_audience_segment_booleans(
+        bio, website, creator.get("username") or ""
+    )
+    has_monetization_signal = calc_monetization_signal(bio, website)
 
     social_engagement_rate = calc_social_engagement_rate(tweets, followers)
     conversation_rate = calc_conversation_rate(tweets, followers)
     fanart_ratio = calc_fanart_ratio(tweets)
+    mention_rate = calc_mention_rate(tweets)
+    retweet_rate = calc_retweet_rate(tweets)
     virality_raw_ratio = calc_virality_raw(top3_avg, monthly_avg)
     monthly_engagement_base = calc_monthly_engagement_base(monthly_avg)
 
@@ -340,13 +457,18 @@ def compute_features_for_creator(creator_id: int) -> dict | None:
         "virality_score": calc_virality(top3_avg, monthly_avg),
         "posting_score": calc_posting(tweets),
         "monetization_score": calc_monetization(bio, website),
+        "has_monetization_signal": has_monetization_signal,
         "growth_score": calc_growth(creator_id, bool(creator.get("is_seed"))),
         "character_consistency": calc_character_consistency(tweets),
         "community_score": calc_community(tweets),
         "audience_segment_score": audience_segment_score,
+        "audience_is_nsfw": audience_is_nsfw,
+        "audience_is_multi_platform": audience_is_multi_platform,
         "social_engagement_rate": social_engagement_rate,
         "conversation_rate": conversation_rate,
         "fanart_ratio": fanart_ratio,
+        "mention_rate": mention_rate,
+        "retweet_rate": retweet_rate,
         "virality_raw_ratio": virality_raw_ratio,
         "monthly_engagement_base": monthly_engagement_base,
     }
@@ -355,14 +477,18 @@ def compute_features_for_creator(creator_id: int) -> dict | None:
         cur.execute(
             """INSERT INTO creator_features
                    (creator_id, audience_score, engagement_score, virality_score,
-                    growth_score, posting_score, monetization_score,
+                    growth_score, posting_score, monetization_score, has_monetization_signal,
                     character_consistency, community_score, audience_segment_score,
+                    audience_is_nsfw, audience_is_multi_platform,
                     social_engagement_rate, conversation_rate, fanart_ratio,
+                    mention_rate, retweet_rate,
                     virality_raw_ratio, monthly_engagement_base)
                VALUES (%(cid)s, %(audience_score)s, %(engagement_score)s, %(virality_score)s,
-                       %(growth_score)s, %(posting_score)s, %(monetization_score)s,
+                       %(growth_score)s, %(posting_score)s, %(monetization_score)s, %(has_monetization_signal)s,
                        %(character_consistency)s, %(community_score)s, %(audience_segment_score)s,
+                       %(audience_is_nsfw)s, %(audience_is_multi_platform)s,
                        %(social_engagement_rate)s, %(conversation_rate)s, %(fanart_ratio)s,
+                       %(mention_rate)s, %(retweet_rate)s,
                        %(virality_raw_ratio)s, %(monthly_engagement_base)s)
                ON CONFLICT (creator_id) DO UPDATE SET
                    audience_score = EXCLUDED.audience_score,
@@ -371,12 +497,17 @@ def compute_features_for_creator(creator_id: int) -> dict | None:
                    growth_score = EXCLUDED.growth_score,
                    posting_score = EXCLUDED.posting_score,
                    monetization_score = EXCLUDED.monetization_score,
+                   has_monetization_signal = EXCLUDED.has_monetization_signal,
                    character_consistency = EXCLUDED.character_consistency,
                    community_score = EXCLUDED.community_score,
                    audience_segment_score = EXCLUDED.audience_segment_score,
+                   audience_is_nsfw = EXCLUDED.audience_is_nsfw,
+                   audience_is_multi_platform = EXCLUDED.audience_is_multi_platform,
                    social_engagement_rate = EXCLUDED.social_engagement_rate,
                    conversation_rate = EXCLUDED.conversation_rate,
                    fanart_ratio = EXCLUDED.fanart_ratio,
+                   mention_rate = EXCLUDED.mention_rate,
+                   retweet_rate = EXCLUDED.retweet_rate,
                    virality_raw_ratio = EXCLUDED.virality_raw_ratio,
                    monthly_engagement_base = EXCLUDED.monthly_engagement_base,
                    calculated_at = NOW()""",
@@ -393,7 +524,7 @@ def compute_features_for_creator(creator_id: int) -> dict | None:
 
 
 def backfill_audience_segment_for_existing_features() -> int:
-    """为已有 creator_features 但缺少 audience_segment_score 的存量记录补算。
+    """为已有 creator_features 但缺少受众分段特征的存量记录补算。
 
     部署新增特征列后，存量记录不会自动获得新值；此函数幂等补算。
     """
@@ -401,17 +532,27 @@ def backfill_audience_segment_for_existing_features() -> int:
         """SELECT c.id, c.username, c.bio, c.website
            FROM creators c
            JOIN creator_features cf ON cf.creator_id = c.id
-           WHERE cf.audience_segment_score IS NULL"""
+           WHERE cf.audience_segment_score IS NULL
+              OR cf.audience_is_nsfw IS NULL
+              OR cf.audience_is_multi_platform IS NULL"""
     )
     updated = 0
     for r in rows:
-        score, segment = calc_audience_segment(
-            r.get("bio") or "", r.get("website") or "", r.get("username") or ""
+        bio = r.get("bio") or ""
+        website = r.get("website") or ""
+        username = r.get("username") or ""
+        score, segment = calc_audience_segment(bio, website, username)
+        audience_is_nsfw, audience_is_multi_platform = calc_audience_segment_booleans(
+            bio, website, username
         )
         with get_cursor() as cur:
             cur.execute(
-                "UPDATE creator_features SET audience_segment_score = %s WHERE creator_id = %s",
-                (score, r["id"]),
+                """UPDATE creator_features
+                      SET audience_segment_score = %s,
+                          audience_is_nsfw = %s,
+                          audience_is_multi_platform = %s
+                    WHERE creator_id = %s""",
+                (score, audience_is_nsfw, audience_is_multi_platform, r["id"]),
             )
             cur.execute(
                 "UPDATE creators SET creator_segment = %s WHERE id = %s AND creator_segment IS DISTINCT FROM %s",
@@ -419,7 +560,7 @@ def backfill_audience_segment_for_existing_features() -> int:
             )
         updated += 1
     if updated:
-        logger.info("Backfilled audience_segment_score for %d existing creators", updated)
+        logger.info("Backfilled audience_segment features for %d existing creators", updated)
     return updated
 
 
