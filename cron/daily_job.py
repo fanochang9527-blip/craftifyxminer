@@ -1,9 +1,12 @@
 """定时任务编排 — APScheduler.
 
 Schedule:
-  08:00 — 全链路: 锚点 → L1 扫描 → 深度抓取 → 特征 → Backfill → SPS
-  09:00 — 补全 creator_graph 中心度回刷（幂等兜底）
-  23:00 — 生成日报数据, 更新成本统计, 种子晋升
+  00:00 — 全链路: 锚点 → L1 扫描 → 深度抓取 → 特征 → Backfill → SPS
+  01:00 — 补全 creator_graph 中心度回刷（幂等兜底）
+  02:00 — 补算有 tweets 但缺失特征的 creator_features
+  03:00 — 将 placeholder growth_score 转正为真实值
+  22:00 — 生成日报数据, 更新成本统计, 种子晋升
+  23:00 — 种子 / BD interested 创作者粉丝数刷新
 """
 
 import logging
@@ -19,7 +22,7 @@ logger = logging.getLogger(__name__)
 scheduler = BlockingScheduler(timezone="Asia/Shanghai")
 
 
-@scheduler.scheduled_job("cron", hour=8, minute=0, id="daily_pipeline", misfire_grace_time=7200)
+@scheduler.scheduled_job("cron", hour=0, minute=0, id="daily_pipeline", misfire_grace_time=7200)
 def job_daily_pipeline():
     """Run the full daily pipeline with structured logging."""
     from pipeline.runner import run_full_pipeline
@@ -27,7 +30,7 @@ def job_daily_pipeline():
     logger.info("Daily pipeline finished: %s", result.get("status", "UNKNOWN"))
 
 
-@scheduler.scheduled_job("cron", hour=9, minute=0, id="backfill_graph", misfire_grace_time=3600)
+@scheduler.scheduled_job("cron", hour=1, minute=0, id="backfill_graph", misfire_grace_time=3600)
 def job_backfill_graph():
     """Backfill creator_graph from anchor_seed and recalculate centrality tiers."""
     logger.info("=== Job: backfill_graph ===")
@@ -40,7 +43,7 @@ def job_backfill_graph():
     )
 
 
-@scheduler.scheduled_job("cron", hour=10, minute=0, id="backfill_features", misfire_grace_time=3600)
+@scheduler.scheduled_job("cron", hour=2, minute=0, id="backfill_features", misfire_grace_time=3600)
 def job_backfill_features():
     """Backfill creator_features for any creators with tweets but missing features."""
     logger.info("=== Job: backfill_features ===")
@@ -49,7 +52,7 @@ def job_backfill_features():
     logger.info("Backfilled features for %d creators", count)
 
 
-@scheduler.scheduled_job("cron", hour=23, minute=0, id="daily_summary", misfire_grace_time=21600)
+@scheduler.scheduled_job("cron", hour=22, minute=0, id="daily_summary", misfire_grace_time=21600)
 def job_daily_summary():
     """Generate daily summary and ensure cost row exists."""
     logger.info("=== Job: daily_summary ===")
@@ -78,7 +81,7 @@ def job_daily_summary():
     logger.info("Seeds promoted: %d", promoted)
 
 
-@scheduler.scheduled_job("cron", hour=6, minute=0, id="follower_refresh", misfire_grace_time=3600)
+@scheduler.scheduled_job("cron", hour=23, minute=0, id="follower_refresh", misfire_grace_time=3600)
 def job_follower_refresh():
     """Periodic follower refresh for seeds and interested creators (every 3 days per creator)."""
     logger.info("=== Job: follower_refresh ===")
@@ -92,7 +95,7 @@ def job_follower_refresh():
     )
 
 
-@scheduler.scheduled_job("cron", hour=11, minute=0, id="growth_monitor", misfire_grace_time=3600)
+@scheduler.scheduled_job("cron", hour=3, minute=0, id="growth_monitor", misfire_grace_time=3600)
 def job_growth_monitor():
     """Graduate placeholder growth scores to real values after 30 days of history."""
     logger.info("=== Job: growth_monitor ===")
