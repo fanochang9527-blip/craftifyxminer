@@ -7,10 +7,12 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 from datetime import date
 
+import httpx
 from psycopg2.extras import Json as _Psycopg2Json
 
 from config.settings import (
@@ -51,6 +53,87 @@ SYSTEM_PROMPT = """\
 请返回严格的 JSON 格式，不要包含 markdown 代码块：
 {"is_realistic": true/false, "has_fixed_ip": true/false, "confidence": 0.0-1.0, "reason": "简短理由"}
 """
+
+
+async def _download_image_async(url: str) -> tuple[bytes | None, str | None]:
+    """下载图片并返回 (bytes, content_type)。"""
+    try:
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+            resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+            resp.raise_for_status()
+            return resp.content, resp.headers.get("content-type")
+    except Exception as e:
+        logger.warning("Failed to download image %s: %s", url, e)
+        return None, None
+
+
+def _guess_mime_type(url: str, content_type_header: str | None) -> str:
+    """按 HTTP Content-Type 或 URL 扩展名推断 MIME 类型。"""
+    if content_type_header:
+        ct = content_type_header.split(";")[0].strip().lower()
+        if ct in ("image/png", "image/jpeg", "image/webp", "image/gif"):
+            return ct
+    url_lower = url.lower()
+    if url_lower.endswith(".png"):
+        return "image/png"
+    if url_lower.endswith(".gif"):
+        return "image/gif"
+    if url_lower.endswith(".webp"):
+        return "image/webp"
+    return "image/jpeg"
+
+
+def _is_unsupported_image_error(exc: Exception) -> bool:
+    """判断异常是否为图片 URL/格式不被模型支持。"""
+    msg = str(exc).lower()
+    return "unsupported image url" in msg or "unsupported image format" in msg
+
+
+async def _convert_image_urls_to_base64(messages: list[dict]) -> list[dict]:
+    """把 messages 中所有 image_url 的外部 URL 下载并转成 base64 data URL。
+
+    下载失败的 URL 保持原样，由后续调用自行处理。
+    """
+    urls_to_download: list[str] = []
+    for msg in messages:
+        content = msg.get("content")
+        if isinstance(content, list):
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "image_url":
+                    url = block.get("image_url", {}).get("url")
+                    if url and not url.startswith("data:"):
+                        urls_to_download.append(url)
+
+    if not urls_to_download:
+        return messages
+
+    downloaded = await asyncio.gather(*[_download_image_async(u) for u in urls_to_download])
+    url_to_data: dict[str, str] = {}
+    for url, (data, content_type) in zip(urls_to_download, downloaded):
+        if data:
+            mime = _guess_mime_type(url, content_type)
+            b64 = base64.b64encode(data).decode("utf-8")
+            url_to_data[url] = f"data:{mime};base64,{b64}"
+        else:
+            url_to_data[url] = url
+
+    new_messages: list[dict] = []
+    for msg in messages:
+        new_msg = dict(msg)
+        content = msg.get("content")
+        if isinstance(content, list):
+            new_content: list[dict] = []
+            for block in content:
+                new_block = dict(block)
+                if new_block.get("type") == "image_url":
+                    url = new_block.get("image_url", {}).get("url")
+                    if url in url_to_data:
+                        new_block["image_url"] = {"url": url_to_data[url]}
+                new_content.append(new_block)
+            new_msg["content"] = new_content
+        new_messages.append(new_msg)
+
+    return new_messages
 
 
 class ContentStyleFilter:
@@ -299,6 +382,9 @@ class ContentStyleFilter:
     async def _try_primary_model(self, creator_id: int, username: str, tweets: list[dict]) -> dict | None:
         """尝试 OpenAI 兼容的主模型链。
 
+        优先直接传图片 URL；若模型报 unsupported image url/format，
+        则自动下载图片并转成 base64 data URL 重试一次。
+
         Returns:
             dict: 分析结果（成功或解析失败均返回，不 fallback）
             None: API 调用异常，需要 fallback 到备选模型
@@ -308,11 +394,27 @@ class ContentStyleFilter:
             resp = await self._call_with_retry(messages)
             self._track_cost(resp.get("usage", {}))
         except Exception as e:
-            logger.warning(
-                "Primary model chain API call failed for creator %d: %s",
-                creator_id, e,
-            )
-            return None  # API 异常 → 触发 fallback
+            if _is_unsupported_image_error(e):
+                logger.info(
+                    "Image URL not supported for creator %d, retrying with base64 data URLs",
+                    creator_id,
+                )
+                try:
+                    base64_messages = await _convert_image_urls_to_base64(messages)
+                    resp = await self._call_with_retry(base64_messages, max_retries=2)
+                    self._track_cost(resp.get("usage", {}))
+                except Exception as e2:
+                    logger.warning(
+                        "Base64 retry also failed for creator %d: %s",
+                        creator_id, e2,
+                    )
+                    return None
+            else:
+                logger.warning(
+                    "Primary model chain API call failed for creator %d: %s",
+                    creator_id, e,
+                )
+                return None
 
         provider = resp.get("_provider", self._provider)
         model = resp.get("_model", self._model)
