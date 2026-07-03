@@ -164,12 +164,12 @@ CONTENT_STYLE_MAX_MEDIA_PER_CREATOR = int(os.getenv("CONTENT_STYLE_MAX_MEDIA_PER
 CONTENT_STYLE_MAX_TWEETS_PER_CREATOR = int(os.getenv("CONTENT_STYLE_MAX_TWEETS_PER_CREATOR", "10"))
 CONTENT_STYLE_CONFIDENCE_THRESHOLD = float(os.getenv("CONTENT_STYLE_CONFIDENCE_THRESHOLD", "0.7"))
 CONTENT_STYLE_BATCH_SIZE = int(os.getenv("CONTENT_STYLE_BATCH_SIZE", "5"))
-# 内容风格过滤可独立配置 fallback chain；未配置则复用全局 FALLBACK_CHAIN
-_content_style_fallback_raw = os.getenv("CONTENT_STYLE_FALLBACK_CHAIN", "").strip()
+# 内容风格过滤可独立配置 fallback chain；未配置则默认仅使用 Moonshot（其 vision 模型对图片 URL 支持有限，兜底逻辑会自动转 base64）
+_content_style_fallback_raw = os.getenv("CONTENT_STYLE_FALLBACK_CHAIN", "moonshot").strip()
 CONTENT_STYLE_FALLBACK_CHAIN = (
     [p.strip() for p in _content_style_fallback_raw.split(",") if p.strip()]
     if _content_style_fallback_raw
-    else list(FALLBACK_CHAIN)
+    else ["moonshot"]
 )
 
 # --- 粉丝量急剧下降预警 ---

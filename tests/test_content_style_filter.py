@@ -101,9 +101,9 @@ class TestAnalyzeOne:
     def mock_filter(self):
         with patch("pipeline.content_style_filter.PROVIDER_CONFIGS", {
             "mock": {"api_key": "sk-mock", "base_url": "https://mock.api/v1"},
-        }), patch("pipeline.content_style_filter.CONTENT_STYLE_FALLBACK_CHAIN", ["mock"]), \
-             patch("pipeline.content_style_filter.PROVIDER_MODELS", {"mock": "mock-vision-model"}), \
-             patch("pipeline.content_style_filter.CONTENT_STYLE_LLM_PROVIDER", "mock"), \
+        }), patch("pipeline.content_style_filter.CONTENT_STYLE_FALLBACK_CHAIN", ["moonshot"]), \
+             patch("pipeline.content_style_filter.PROVIDER_MODELS", {"moonshot": "mock-vision-model"}), \
+             patch("pipeline.content_style_filter.CONTENT_STYLE_LLM_PROVIDER", "moonshot"), \
              patch("pipeline.content_style_filter.CONTENT_STYLE_LLM_MODEL", "mock-vision-model"):
             filt = ContentStyleFilter()
             filt.max_media = 5
@@ -124,7 +124,7 @@ class TestAnalyzeOne:
         mock_response = {
             "content": json.dumps({"is_realistic": False, "has_fixed_ip": True, "confidence": 0.9, "reason": "cute chibi style with recurring character"}),
             "usage": {"total_tokens": 200},
-            "_provider": "mock",
+            "_provider": "moonshot",
             "_model": "mock-vision-model",
         }
 
@@ -137,8 +137,73 @@ class TestAnalyzeOne:
         assert result["has_fixed_ip"] is True
         assert result["confidence"] == 0.9
         assert result["passed"] is True
-        assert result["model_used"] == "mock/mock-vision-model"
+        assert result["model_used"] == "moonshot/mock-vision-model"
         assert result["media_sample"] == ["https://a/1.jpg"]
+
+    # ------------------------------------------------------------------
+    # URL 不被识别时自动转 base64 重试
+    # ------------------------------------------------------------------
+
+    def test_fallback_to_base64_on_unsupported_url(self, mock_filter):
+        """Moonshot 不识别外部图片 URL 时，应下载并转 base64 重试。"""
+        creator = {"id": 10, "username": "artist10"}
+        tweets = [
+            {"text": "art", "media_urls": ["https://a/10.jpg"], "media_types": ["photo"]},
+        ]
+        mock_response = {
+            "content": json.dumps({"is_realistic": False, "has_fixed_ip": True, "confidence": 0.9, "reason": "cute"}),
+            "usage": {"total_tokens": 200},
+            "_provider": "moonshot",
+            "_model": "mock-vision-model",
+        }
+        unsupported_error = Exception("Invalid request: unsupported image url: https://a/10.jpg")
+
+        with patch("pipeline.content_style_filter.fetch_all", return_value=tweets), \
+             patch.object(mock_filter, "_call_with_retry", new_callable=AsyncMock, side_effect=[unsupported_error, mock_response]) as mock_call, \
+             patch("pipeline.content_style_filter._download_image_async", new_callable=AsyncMock, return_value=(b"fakebytes", "image/jpeg")):
+            result = asyncio.get_event_loop().run_until_complete(mock_filter._analyze_one(creator))
+
+        assert result["status"] == "analyzed"
+        assert result["passed"] is True
+        assert mock_call.call_count == 2
+        # 第二次调用应使用 base64 data URL
+        second_messages = mock_call.call_args_list[1].args[0]
+        image_parts = [c for c in second_messages[1]["content"] if c["type"] == "image_url"]
+        assert len(image_parts) == 1
+        assert image_parts[0]["image_url"]["url"].startswith("data:image/jpeg;base64,")
+
+    def test_no_base64_fallback_for_non_image_error(self, mock_filter):
+        """非图片类 API 错误不应触发下载转 base64。"""
+        creator = {"id": 11, "username": "artist11"}
+        tweets = [
+            {"text": "art", "media_urls": ["https://a/11.jpg"], "media_types": ["photo"]},
+        ]
+        auth_error = Exception("401 Authentication failed")
+
+        with patch("pipeline.content_style_filter.fetch_all", return_value=tweets), \
+             patch.object(mock_filter, "_call_with_retry", new_callable=AsyncMock, side_effect=auth_error) as mock_call, \
+             patch("pipeline.content_style_filter._download_image_async", new_callable=AsyncMock) as mock_download:
+            result = asyncio.get_event_loop().run_until_complete(mock_filter._analyze_one(creator))
+
+        assert result["status"] == "failed"
+        assert mock_call.call_count == 1
+        mock_download.assert_not_called()
+
+    def test_base64_retry_failure_returns_failed(self, mock_filter):
+        """URL 不识别且 base64 重试也失败时，应返回 failed。"""
+        creator = {"id": 12, "username": "artist12"}
+        tweets = [
+            {"text": "art", "media_urls": ["https://a/12.jpg"], "media_types": ["photo"]},
+        ]
+        unsupported_error = Exception("Invalid request: unsupported image url: https://a/12.jpg")
+        retry_error = Exception("still fails after base64")
+
+        with patch("pipeline.content_style_filter.fetch_all", return_value=tweets), \
+             patch.object(mock_filter, "_call_with_retry", new_callable=AsyncMock, side_effect=[unsupported_error, retry_error]), \
+             patch("pipeline.content_style_filter._download_image_async", new_callable=AsyncMock, return_value=(b"fakebytes", "image/jpeg")):
+            result = asyncio.get_event_loop().run_until_complete(mock_filter._analyze_one(creator))
+
+        assert result["status"] == "failed"
 
     # ------------------------------------------------------------------
     # 拒绝场景 1：写实风格（无论有没有固定IP）
@@ -153,7 +218,7 @@ class TestAnalyzeOne:
         mock_response = {
             "content": json.dumps({"is_realistic": True, "has_fixed_ip": True, "confidence": 0.9, "reason": "hyper-realistic style"}),
             "usage": {"total_tokens": 200},
-            "_provider": "mock",
+            "_provider": "moonshot",
             "_model": "mock-vision-model",
         }
 
@@ -165,7 +230,7 @@ class TestAnalyzeOne:
         assert result["is_realistic"] is True
         assert result["has_fixed_ip"] is True
         assert result["passed"] is False
-        assert result["model_used"] == "mock/mock-vision-model"
+        assert result["model_used"] == "moonshot/mock-vision-model"
 
     def test_rejects_when_realistic_and_no_fixed_ip(self, mock_filter):
         """写实风格 + 无固定IP = 应拒绝。"""
@@ -176,7 +241,7 @@ class TestAnalyzeOne:
         mock_response = {
             "content": json.dumps({"is_realistic": True, "has_fixed_ip": False, "confidence": 0.85, "reason": "realistic landscapes, no recurring character"}),
             "usage": {"total_tokens": 200},
-            "_provider": "mock",
+            "_provider": "moonshot",
             "_model": "mock-vision-model",
         }
 
@@ -202,7 +267,7 @@ class TestAnalyzeOne:
         mock_response = {
             "content": json.dumps({"is_realistic": False, "has_fixed_ip": False, "confidence": 0.8, "reason": "varied random doodles, no recurring character"}),
             "usage": {"total_tokens": 200},
-            "_provider": "mock",
+            "_provider": "moonshot",
             "_model": "mock-vision-model",
         }
 
@@ -228,7 +293,7 @@ class TestAnalyzeOne:
         mock_response = {
             "content": json.dumps({"is_realistic": False, "has_fixed_ip": True, "confidence": 0.5, "reason": "maybe a recurring character but hard to tell"}),
             "usage": {"total_tokens": 200},
-            "_provider": "mock",
+            "_provider": "moonshot",
             "_model": "mock-vision-model",
         }
 
@@ -260,7 +325,7 @@ class TestAnalyzeOne:
         mock_response = {
             "content": "this is not valid json",
             "usage": {"total_tokens": 100},
-            "_provider": "mock",
+            "_provider": "moonshot",
             "_model": "mock-vision-model",
         }
 
@@ -269,7 +334,7 @@ class TestAnalyzeOne:
             result = asyncio.get_event_loop().run_until_complete(mock_filter._analyze_one(creator))
 
         assert result["status"] == "failed"
-        assert result["model_used"] == "mock/mock-vision-model"
+        assert result["model_used"] == "moonshot/mock-vision-model"
 
 
 class TestWriteResults:
