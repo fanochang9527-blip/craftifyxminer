@@ -531,6 +531,8 @@ CREATE TABLE IF NOT EXISTS seed_follower_snapshots (
     tweets_count INTEGER,
     source VARCHAR(20),
     batch_tag TEXT,
+    anomaly_type VARCHAR(20),
+    anomaly_note TEXT,
     UNIQUE(creator_id, observed_at)
 );
 COMMENT ON TABLE seed_follower_snapshots IS '种子粉丝历史快照表：种子创作者的专属粉丝追踪，粒度更细，用于增长评分计算';
