@@ -201,12 +201,23 @@ def _normalize_url(raw: str) -> str:
     return raw.lower()
 
 
-def extract_links(bio: str | None) -> list[str]:
-    """从 bio 文本中提取所有 URL，去重，按出现顺序返回。"""
-    if not bio:
-        return []
+def extract_links(bio: str | None, expanded_url: str | None = None) -> list[str]:
+    """从 bio 文本和 raw_profile.entities.expanded_url 中提取所有 URL，去重，按优先级返回。
+
+    expanded_url 来自 Twitter/X 用户实体的真实跳转链接，通常能解析 t.co 短链，
+    因此优先级高于 bio 中直接出现的链接。
+    """
     seen: set[str] = set()
     links: list[str] = []
+
+    if expanded_url:
+        url = _normalize_url(expanded_url)
+        seen.add(url)
+        links.append(url)
+
+    if not bio:
+        return links
+
     for match in _URL_RE.finditer(bio):
         url = _normalize_url(match.group(0))
         if url not in seen:
@@ -296,14 +307,17 @@ def rebuild_website_from_bio(
     if fetch_all is None or get_cursor is None:
         raise RuntimeError("Database connection not available")
 
-    logger.info("Step 1/4: Fetching creators with bio...")
+    logger.info("Step 1/4: Fetching creators with bio or expanded_url...")
     rows = fetch_all(
-        """SELECT id, username, bio, website
-           FROM creators
-           WHERE bio IS NOT NULL AND bio != ''
-           ORDER BY id"""
+        """SELECT c.id, c.username, c.bio, c.website,
+                  crp.raw_profile->'entities'->>'expanded_url' AS expanded_url
+           FROM creators c
+           LEFT JOIN creator_raw_profiles crp ON crp.creator_id = c.id
+           WHERE (c.bio IS NOT NULL AND c.bio != '')
+              OR (crp.raw_profile->'entities'->>'expanded_url' IS NOT NULL)
+           ORDER BY c.id"""
     )
-    logger.info("Found %d creators with non-empty bio", len(rows))
+    logger.info("Found %d creators with bio or expanded_url", len(rows))
 
     # 先清空所有 website
     logger.info("Step 2/4: Clearing creators.website...")
@@ -323,7 +337,8 @@ def rebuild_website_from_bio(
         old_website = (r.get("website") or "").strip().lower()
         bio = r.get("bio") or ""
 
-        links = extract_links(bio)
+        expanded_url = r.get("expanded_url")
+        links = extract_links(bio, expanded_url)
         new_website = pick_website(links)
         new_website_str = (new_website or "").strip()
 

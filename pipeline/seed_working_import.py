@@ -104,3 +104,17 @@ def import_seed_working(path: str | Path) -> dict:
         "updated": updated,
         "existing": len(existing),
     }
+
+
+if __name__ == "__main__":
+    import argparse
+    import logging
+
+    logging.basicConfig(level=logging.INFO)
+
+    parser = argparse.ArgumentParser(description="Import working creators from seed_working.xlsx")
+    parser.add_argument("--xlsx", required=True, help="Path to seed_working.xlsx")
+    args = parser.parse_args()
+
+    stats = import_seed_working(args.xlsx)
+    print(stats)
