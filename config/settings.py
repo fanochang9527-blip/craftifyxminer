@@ -34,6 +34,7 @@ LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "120"))
 # 各 OpenAI 兼容厂商的 completion 上限不同；ai_filter 会取 min(LLM_MAX_TOKENS, cap)
 PROVIDER_MAX_OUTPUT_TOKENS = {
     "moonshot": 16384,
+    "moonshot_fallback": 16384,
     "deepseek": 8192,
     "dashscope": 8192,
 }
@@ -42,6 +43,10 @@ PROVIDER_CONFIGS = {
     "moonshot": {
         "api_key": os.getenv("MOONSHOT_API_KEY", ""),
         "base_url": os.getenv("MOONSHOT_BASE_URL", "https://api.moonshot.ai/v1"),
+    },
+    "moonshot_fallback": {
+        "api_key": os.getenv("MOONSHOT_FALLBACK_API_KEY", ""),
+        "base_url": os.getenv("MOONSHOT_FALLBACK_BASE_URL", "https://api.moonshot.ai/v1"),
     },
     "deepseek": {
         "api_key": os.getenv("DEEPSEEK_API_KEY", ""),
@@ -53,13 +58,14 @@ PROVIDER_CONFIGS = {
     },
 }
 
-# 默认仅 Kimi（Moonshot）；需 DeepSeek/百炼时再设 LLM_FALLBACK_CHAIN=moonshot,deepseek,dashscope
-_fallback_raw = os.getenv("LLM_FALLBACK_CHAIN", "moonshot")
+# 默认 Kimi（Moonshot）优先，可选 moonshot_fallback 作为同厂商备用 key；需 DeepSeek/百炼时再设 LLM_FALLBACK_CHAIN=moonshot,moonshot_fallback,deepseek,dashscope
+_fallback_raw = os.getenv("LLM_FALLBACK_CHAIN", "moonshot,moonshot_fallback")
 FALLBACK_CHAIN = [p.strip() for p in _fallback_raw.split(",") if p.strip()]
 
 # --- LLM provider-specific model overrides ---
 PROVIDER_MODELS = {
     "moonshot": os.getenv("MOONSHOT_MODEL", "kimi-k2.5"),
+    "moonshot_fallback": os.getenv("MOONSHOT_FALLBACK_MODEL", "kimi-k2.5"),
     "deepseek": os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
     "dashscope": os.getenv("DASHSCOPE_MODEL", "qwen3.5-plus"),
 }
