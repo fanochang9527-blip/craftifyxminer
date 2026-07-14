@@ -27,8 +27,6 @@ from dashboard.candidates_query import (
     calc_pagination,
 )
 from pipeline.creator_detail_sync import sync_creator_detail
-from pipeline.creator_dna import analyze_creator_dna
-from pipeline.sps_scorer import score_creator
 
 
 def _on_jump_change(key_prefix: str, total_pages: int) -> None:
@@ -442,13 +440,6 @@ def _render_candidates_table() -> None:
                         except Exception:
                             import logging
                             logging.getLogger(__name__).exception("Failed to sync creator_detail after BD interested for creator %d", cid)
-                        # DNA 分析 + SPS 重新打分（异步容错，不阻塞 BD 操作）
-                        try:
-                            analyze_creator_dna(cid)
-                            score_creator(cid)
-                        except Exception:
-                            import logging
-                            logging.getLogger(__name__).exception("Failed to run DNA analysis/SPS scoring after BD interested for creator %d", cid)
                         st.toast(t("candidates.marked_interested"))
                         st.rerun()
             with act_cols[2]:
