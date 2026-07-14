@@ -27,8 +27,21 @@ from dashboard.candidates_query import (
     calc_pagination,
 )
 from pipeline.creator_detail_sync import sync_creator_detail
-from pipeline.creator_dna import analyze_creator_dna
-from pipeline.sps_scorer import score_creator
+
+
+def _on_jump_change(key_prefix: str, total_pages: int) -> None:
+    """Callback for the jump page number_input."""
+    jump_page = st.session_state.get(f"jump_input_{key_prefix}")
+    current_page = st.session_state.get("candidates_page", 1)
+    if jump_page is None:
+        return
+    try:
+        jump_page = int(jump_page)
+    except (ValueError, TypeError):
+        return
+    if 1 <= jump_page <= total_pages and jump_page != current_page:
+        st.session_state["candidates_page"] = jump_page
+        st.session_state["candidates_detail_open_id"] = None
 
 
 def _render_pagination_controls(
@@ -42,21 +55,21 @@ def _render_pagination_controls(
             st.session_state["candidates_page"] = page - 1
             st.session_state["candidates_detail_open_id"] = None
             st.rerun()
+
+    # 使用 number_input + on_change 回调，避免 form 与 @st.fragment 的兼容问题，
+    # 同时避免 value=page 绑定与独立按钮之间的状态冲突。
     with pag_cols[2]:
-        jump_page = st.number_input(
+        st.number_input(
             t("candidates.jump"),
             min_value=1,
             max_value=total_pages,
             value=page,
             key=f"jump_input_{key_prefix}",
             label_visibility="collapsed",
+            on_change=_on_jump_change,
+            args=(key_prefix, total_pages),
         )
-    with pag_cols[3]:
-        if st.button(t("candidates.jump"), key=f"jump_btn_{key_prefix}"):
-            if jump_page != page:
-                st.session_state["candidates_page"] = int(jump_page)
-                st.session_state["candidates_detail_open_id"] = None
-                st.rerun()
+
     with pag_cols[4]:
         if st.button("➡️", disabled=(page >= total_pages), key=f"next_{key_prefix}"):
             st.session_state["candidates_page"] = page + 1
@@ -215,6 +228,10 @@ def _render_candidates_table() -> None:
     """Render the full candidates table inside a fragment so that button clicks
     trigger only a local rerun instead of reloading the entire page."""
 
+    user = st.session_state.get("user", {})
+    is_admin = user.get("role") == "admin"
+    current_user_id = user.get("id")
+
     where_sql, params = build_where_clauses(
         centrality=centrality_filter,
         creator_types=creator_types,
@@ -227,6 +244,7 @@ def _render_candidates_table() -> None:
         pred_sales_min=pred_sales_min,
         pred_sales_max=pred_sales_max,
         only_sellable=only_sellable,
+        current_user_id=current_user_id,
     )
 
     order_sql = (
@@ -235,20 +253,16 @@ def _render_candidates_table() -> None:
         else f"CASE WHEN COALESCE(cs.is_sellable, false) THEN COALESCE(cs.sps_score, 0) ELSE COALESCE(cs.sps_score, 0) * {NON_SELLABLE_SPS_WEIGHT} END DESC, COALESCE(cs.predicted_sales, 0) DESC, cs.sps_score DESC"
     )
 
-    user = st.session_state.get("user", {})
-    is_admin = user.get("role") == "admin"
-
-    current_user_id = user.get("id")
-
     if is_admin:
         count_query = f"""
             SELECT COUNT(*) AS cnt
             FROM creators c
             JOIN creator_scores cs ON cs.creator_id = c.id
             LEFT JOIN creator_features cf ON cf.creator_id = c.id
+            LEFT JOIN bd_decisions bd ON bd.creator_id = c.id AND bd.user_id = %s
             WHERE {where_sql}
         """
-        total_row = fetch_one(count_query, tuple(params))
+        total_row = fetch_one(count_query, (current_user_id,) + tuple(params))
         total_count = total_row["cnt"] if total_row else 0
 
         page = st.session_state.get("candidates_page", 1)
@@ -426,13 +440,6 @@ def _render_candidates_table() -> None:
                         except Exception:
                             import logging
                             logging.getLogger(__name__).exception("Failed to sync creator_detail after BD interested for creator %d", cid)
-                        # DNA 分析 + SPS 重新打分（异步容错，不阻塞 BD 操作）
-                        try:
-                            analyze_creator_dna(cid)
-                            score_creator(cid)
-                        except Exception:
-                            import logging
-                            logging.getLogger(__name__).exception("Failed to run DNA analysis/SPS scoring after BD interested for creator %d", cid)
                         st.toast(t("candidates.marked_interested"))
                         st.rerun()
             with act_cols[2]:
