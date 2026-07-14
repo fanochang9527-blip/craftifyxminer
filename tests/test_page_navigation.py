@@ -34,6 +34,6 @@ class TestCandidatesPageSource:
         source = path.read_text(encoding="utf-8")
         assert "jump_page" in source
         assert "jump_input_" in source
-        assert "jump_btn_" in source
         assert "st.number_input" in source
+        assert "on_change=_on_jump_change" in source
         assert 'label_visibility="collapsed"' in source
