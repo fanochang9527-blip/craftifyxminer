@@ -149,6 +149,7 @@ CREATE TABLE IF NOT EXISTS creator_features (
     retweet_rate FLOAT,
     virality_raw_ratio FLOAT,
     monthly_engagement_base FLOAT,
+    days_since_last_post FLOAT,
     -- DNA 特征（用于 SPS Lasso 模型）
     followers_log FLOAT,
     following_follower_ratio FLOAT,
@@ -193,6 +194,7 @@ COMMENT ON COLUMN creator_features.mention_rate IS '提及互动率：含 @ ment
 COMMENT ON COLUMN creator_features.retweet_rate IS '平均转发数：单条推文的平均 retweets（来源：feature_engine.calc_retweet_rate）';
 COMMENT ON COLUMN creator_features.virality_raw_ratio IS '原始传播比率：top3_avg / monthly_avg，不封顶（来源：feature_engine.calc_virality_raw）';
 COMMENT ON COLUMN creator_features.monthly_engagement_base IS '月度互动基数：保留 monthly_avg 绝对值（来源：feature_engine.calc_monthly_engagement_base）';
+COMMENT ON COLUMN creator_features.days_since_last_post IS '最近发帖距今天数：越小表示创作者越活跃，无推文时按 365 天计（来源：feature_engine.calc_days_since_last_post）';
 
 -- 4. creator_graph (关系图谱)
 CREATE TABLE IF NOT EXISTS creator_graph (

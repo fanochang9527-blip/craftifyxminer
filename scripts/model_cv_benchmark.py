@@ -68,6 +68,7 @@ SELLABILITY_FEATURE_COLS = [
     "fanart_ratio",
     "mention_rate",
     "retweet_rate",
+    "days_since_last_post",
     "audience_is_nsfw",
     "audience_is_multi_platform",
 ]

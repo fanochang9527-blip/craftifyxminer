@@ -1,4 +1,4 @@
-"""AB 测试：Sellability 模型 LR vs XGBoost（当前 10 维特征 + StandardScaler）。
+"""AB 测试：Sellability 模型 LR vs XGBoost（当前 11 维特征 + StandardScaler）。
 
 用法：
     python scripts/ab_test_sellability_lr_vs_xgb.py

@@ -43,6 +43,7 @@ from pipeline.feature_engine import (
     calc_audience_segment_booleans,
     # calc_character_consistency,
     calc_conversation_rate,
+    calc_days_since_last_post,
     calc_fanart_ratio,
     calc_mention_rate,
     calc_monetization,
@@ -72,6 +73,7 @@ V1_SELLABILITY_COLS = [
     "fanart_ratio",
     "mention_rate",
     "retweet_rate",
+    "days_since_last_post",
     "audience_is_nsfw",
     "audience_is_multi_platform",
 ]
@@ -85,6 +87,7 @@ V2_SELLABILITY_COLS = [
     "fanart_ratio",
     "mention_rate",
     "retweet_rate",
+    "days_since_last_post",
     "audience_is_nsfw",
     "audience_is_multi_platform",
 ]
@@ -169,6 +172,7 @@ def _compute_raw_features_for_creator(creator_id: int) -> dict:
         "retweet_rate": calc_retweet_rate(tweets),
         "virality_raw_ratio": calc_virality_raw(top3_avg, monthly_avg),
         "monthly_engagement_base": calc_monthly_engagement_base(monthly_avg),
+        "days_since_last_post": calc_days_since_last_post(tweets),
         "creator_type": creator.get("creator_type_auto") or "unknown",
     }
 
