@@ -220,6 +220,32 @@ def calc_posting(tweets: list[dict]) -> float:
     return min(monthly_estimate / 30.0 * 100.0, 100.0)
 
 
+def calc_days_since_last_post(tweets: list[dict]) -> float:
+    """最近一条推文距今的天数。
+
+    越小表示创作者越活跃；无推文或没有有效发布时间时返回 365.0（按一年 stale 处理）。
+    """
+    if not tweets:
+        return 365.0
+
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    latest = None
+    for tw in tweets:
+        created = _parse_tweet_created_at(tw.get("created_at"))
+        if created is None:
+            continue
+        if latest is None or created > latest:
+            latest = created
+
+    if latest is None:
+        return 365.0
+
+    days = (now - latest).total_seconds() / 86400.0
+    return max(0.0, days)
+
+
 def calc_monetization(bio: str, website: str) -> float:
     """Score based on bio_rules.yaml — uses BioRuleFilter for consistency."""
     from pipeline.bio_rule_filter import BioRuleFilter
@@ -450,6 +476,7 @@ def compute_features_for_creator(creator_id: int) -> dict | None:
     retweet_rate = calc_retweet_rate(tweets)
     virality_raw_ratio = calc_virality_raw(top3_avg, monthly_avg)
     monthly_engagement_base = calc_monthly_engagement_base(monthly_avg)
+    days_since_last_post = calc_days_since_last_post(tweets)
 
     features = {
         "audience_score": calc_audience(followers, following),
@@ -471,6 +498,7 @@ def compute_features_for_creator(creator_id: int) -> dict | None:
         "retweet_rate": retweet_rate,
         "virality_raw_ratio": virality_raw_ratio,
         "monthly_engagement_base": monthly_engagement_base,
+        "days_since_last_post": days_since_last_post,
     }
 
     with get_cursor() as cur:
@@ -482,14 +510,14 @@ def compute_features_for_creator(creator_id: int) -> dict | None:
                     audience_is_nsfw, audience_is_multi_platform,
                     social_engagement_rate, conversation_rate, fanart_ratio,
                     mention_rate, retweet_rate,
-                    virality_raw_ratio, monthly_engagement_base)
+                    virality_raw_ratio, monthly_engagement_base, days_since_last_post)
                VALUES (%(cid)s, %(audience_score)s, %(engagement_score)s, %(virality_score)s,
                        %(growth_score)s, %(posting_score)s, %(monetization_score)s, %(has_monetization_signal)s,
                        %(character_consistency)s, %(community_score)s, %(audience_segment_score)s,
                        %(audience_is_nsfw)s, %(audience_is_multi_platform)s,
                        %(social_engagement_rate)s, %(conversation_rate)s, %(fanart_ratio)s,
                        %(mention_rate)s, %(retweet_rate)s,
-                       %(virality_raw_ratio)s, %(monthly_engagement_base)s)
+                       %(virality_raw_ratio)s, %(monthly_engagement_base)s, %(days_since_last_post)s)
                ON CONFLICT (creator_id) DO UPDATE SET
                    audience_score = EXCLUDED.audience_score,
                    engagement_score = EXCLUDED.engagement_score,
@@ -510,6 +538,7 @@ def compute_features_for_creator(creator_id: int) -> dict | None:
                    retweet_rate = EXCLUDED.retweet_rate,
                    virality_raw_ratio = EXCLUDED.virality_raw_ratio,
                    monthly_engagement_base = EXCLUDED.monthly_engagement_base,
+                   days_since_last_post = EXCLUDED.days_since_last_post,
                    calculated_at = NOW()""",
             {"cid": creator_id, **features},
         )

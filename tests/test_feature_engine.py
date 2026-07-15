@@ -17,6 +17,7 @@ from pipeline.feature_engine import (
     calc_character_consistency,
     calc_community,
     calc_conversation_rate,
+    calc_days_since_last_post,
     calc_engagement,
     calc_fanart_ratio,
     calc_mention_rate,
@@ -137,6 +138,39 @@ class TestPosting:
         ]
         score = calc_posting(tweets)
         assert score >= 95.0
+
+
+class TestDaysSinceLastPost:
+    def test_empty_tweets(self):
+        assert calc_days_since_last_post([]) == 365.0
+
+    def test_no_valid_dates(self):
+        tweets = [_make_tweet(), _make_tweet()]
+        for tw in tweets:
+            tw["created_at"] = None
+        assert calc_days_since_last_post(tweets) == 365.0
+
+    def test_recent_post(self):
+        now = datetime.now(timezone.utc)
+        tweets = [_make_tweet(created_at=(now - timedelta(hours=12)).isoformat())]
+        days = calc_days_since_last_post(tweets)
+        assert 0.0 <= days <= 1.0
+
+    def test_stale_post(self):
+        now = datetime.now(timezone.utc)
+        tweets = [_make_tweet(created_at=(now - timedelta(days=60)).isoformat())]
+        days = calc_days_since_last_post(tweets)
+        assert 59.0 <= days <= 61.0
+
+    def test_uses_latest_date(self):
+        now = datetime.now(timezone.utc)
+        tweets = [
+            _make_tweet(created_at=(now - timedelta(days=30)).isoformat()),
+            _make_tweet(created_at=(now - timedelta(days=5)).isoformat()),
+            _make_tweet(created_at=(now - timedelta(days=10)).isoformat()),
+        ]
+        days = calc_days_since_last_post(tweets)
+        assert 4.0 <= days <= 6.0
 
 
 class TestMonetization:

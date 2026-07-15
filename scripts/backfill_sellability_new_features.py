@@ -4,6 +4,7 @@
 - audience_is_nsfw / audience_is_multi_platform
 - has_monetization_signal
 - mention_rate / retweet_rate
+- days_since_last_post
 
 用法：
     python scripts/backfill_sellability_new_features.py
@@ -20,6 +21,7 @@ import logging
 from db.connection import fetch_all, get_cursor
 from pipeline.feature_engine import (
     calc_audience_segment_booleans,
+    calc_days_since_last_post,
     calc_mention_rate,
     calc_monetization_signal,
     calc_retweet_rate,
@@ -38,7 +40,8 @@ def backfill() -> int:
               OR cf.audience_is_multi_platform IS NULL
               OR cf.has_monetization_signal IS NULL
               OR cf.mention_rate IS NULL
-              OR cf.retweet_rate IS NULL"""
+              OR cf.retweet_rate IS NULL
+              OR cf.days_since_last_post IS NULL"""
     )
     updated = 0
     batch_size = 500
@@ -53,10 +56,11 @@ def backfill() -> int:
         has_monetization = calc_monetization_signal(bio, website)
 
         tweets = fetch_all(
-            "SELECT text, retweets FROM tweets WHERE creator_id = %s", (cid,)
+            "SELECT text, retweets, created_at FROM tweets WHERE creator_id = %s", (cid,)
         )
         mention_rate = calc_mention_rate(tweets)
         retweet_rate = calc_retweet_rate(tweets)
+        days_since_last_post = calc_days_since_last_post(tweets)
 
         with get_cursor() as cur:
             cur.execute(
@@ -65,9 +69,10 @@ def backfill() -> int:
                           audience_is_multi_platform = %s,
                           has_monetization_signal = %s,
                           mention_rate = %s,
-                          retweet_rate = %s
+                          retweet_rate = %s,
+                          days_since_last_post = %s
                     WHERE creator_id = %s""",
-                (is_nsfw, is_multi_platform, has_monetization, mention_rate, retweet_rate, cid),
+                (is_nsfw, is_multi_platform, has_monetization, mention_rate, retweet_rate, days_since_last_post, cid),
             )
         updated += 1
 

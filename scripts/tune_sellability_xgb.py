@@ -1,4 +1,4 @@
-"""XGBoost 超参数调优（当前 10 维特征，213 样本）。
+"""XGBoost 超参数调优（当前 11 维特征，213 样本）。
 
 用法：
     python scripts/tune_sellability_xgb.py

@@ -39,6 +39,7 @@ FEATURE_COLS = [
     "fanart_ratio",
     "mention_rate",
     "retweet_rate",
+    "days_since_last_post",
     "audience_is_nsfw",
     "audience_is_multi_platform",
     "creator_type",
@@ -56,6 +57,7 @@ FEATURE_COLS_V2 = [
     "fanart_ratio",
     "mention_rate",
     "retweet_rate",
+    "days_since_last_post",
     "audience_is_nsfw",
     "audience_is_multi_platform",
     "creator_type",
@@ -69,6 +71,7 @@ CONTINUOUS_FEATURE_COLS = [
     "fanart_ratio",
     "mention_rate",
     "retweet_rate",
+    "days_since_last_post",
 ]
 CONTINUOUS_FEATURE_IDX = [FEATURE_COLS.index(c) for c in CONTINUOUS_FEATURE_COLS]
 # V2 与 V1 特征顺序相同，因此连续特征索引也相同。
@@ -83,12 +86,13 @@ def _creator_type_ordinal(ctype: str | None) -> float:
 
 
 def _build_feature_vector(row: dict) -> np.ndarray:
-    """Build 10-dim feature vector: 9 raw/sellability signals + 1 ordinal creator_type.
+    """Build 11-dim feature vector: 10 raw/sellability signals + 1 ordinal creator_type.
 
     - engagement_score 已拆分为 social_engagement_rate 与 conversation_rate
     - audience_segment_score 已拆分为 audience_is_nsfw 与 audience_is_multi_platform
     - monetization_score 已替换为 has_monetization_signal
     - community_score 已拆分为 fanart_ratio / mention_rate / retweet_rate
+    - days_since_last_post 表示最近发帖距今天数，越小越活跃
     由模型自行学习权重，不再使用人工设定的组合分数。
     """
     scores = [float(row.get(col) or 0.0) for col in FEATURE_COLS if col != "creator_type"]
@@ -97,7 +101,7 @@ def _build_feature_vector(row: dict) -> np.ndarray:
 
 
 def _build_feature_vector_v2(row: dict) -> np.ndarray:
-    """Build 10-dim feature vector (V2): 9 raw signals + 1 ordinal creator_type."""
+    """Build 11-dim feature vector (V2): 10 raw signals + 1 ordinal creator_type."""
     scores = [float(row.get(col) or 0.0) for col in FEATURE_COLS_V2 if col != "creator_type"]
     scores.append(_creator_type_ordinal(row.get("creator_type")))
     return np.array(scores)
@@ -234,7 +238,7 @@ def train_model() -> dict:
     else:
         # AB 测试显示 XGBoost 在 recall/F1/ROC-AUC 上均优于 LogisticRegression，
         # 因此生产模型固定使用 XGBoostClassifier。
-        # 超参数经 5-fold CV 调优（213 样本 / 10 维特征）：
+        # 超参数经 5-fold CV 调优（213 样本 / 11 维特征）：
         #   n_estimators=80, max_depth=3, lr=0.05, subsample=1.0, colsample_bytree=0.8
         from xgboost import XGBClassifier
 

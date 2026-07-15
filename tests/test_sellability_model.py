@@ -85,6 +85,7 @@ class TestSingleClassSupport:
             "fanart_ratio": 0.01,
             "mention_rate": 0.01,
             "retweet_rate": 1,
+            "days_since_last_post": 7,
             "audience_is_nsfw": False,
             "audience_is_multi_platform": False,
             "creator_type": "unknown",
@@ -104,6 +105,7 @@ class TestScaler:
                 "fanart_ratio": 0.01,
                 "mention_rate": 0.01,
                 "retweet_rate": 1.0,
+                "days_since_last_post": 30.0,
                 "audience_is_nsfw": True,
                 "audience_is_multi_platform": False,
                 "creator_type": "oc_creator",
@@ -116,6 +118,7 @@ class TestScaler:
                 "fanart_ratio": 0.01,
                 "mention_rate": 0.01,
                 "retweet_rate": 1.0,
+                "days_since_last_post": 5.0,
                 "audience_is_nsfw": False,
                 "audience_is_multi_platform": True,
                 "creator_type": "fan_artist",
@@ -138,11 +141,14 @@ class TestScaler:
 
 
 class TestBuildFeatureVector:
-    def test_length_10(self):
+    def test_length_11(self):
         row = {k: float(i) for i, k in enumerate(FEATURE_COLS)}
         row["creator_type"] = "unknown"
         v = _build_feature_vector(row)
-        assert v.shape == (10,)
+        assert v.shape == (11,)
+
+    def test_days_since_last_post_in_features(self):
+        assert "days_since_last_post" in FEATURE_COLS
 
     def test_engagement_score_replaced_by_raw_rates(self):
         assert "engagement_score" not in FEATURE_COLS
@@ -169,11 +175,13 @@ class TestBuildFeatureVector:
         row["audience_is_nsfw"] = True
         row["audience_is_multi_platform"] = False
         row["has_monetization_signal"] = True
+        row["days_since_last_post"] = 10.0
         row["creator_type"] = "unknown"
         v = _build_feature_vector(row)
         assert v[FEATURE_COLS.index("audience_is_nsfw")] == 1.0
         assert v[FEATURE_COLS.index("audience_is_multi_platform")] == 0.0
         assert v[FEATURE_COLS.index("has_monetization_signal")] == 1.0
+        assert v[FEATURE_COLS.index("days_since_last_post")] == 10.0
 
     def test_creator_type_ordinal(self):
         row = {k: 0.0 for k in FEATURE_COLS}
@@ -191,11 +199,14 @@ class TestBuildFeatureVector:
 
 
 class TestBuildFeatureVectorV2:
-    def test_length_10(self):
+    def test_length_11(self):
         row = {k: float(i) for i, k in enumerate(FEATURE_COLS_V2)}
         row["creator_type"] = "unknown"
         v = _build_feature_vector_v2(row)
-        assert v.shape == (10,)
+        assert v.shape == (11,)
+
+    def test_days_since_last_post_in_features(self):
+        assert "days_since_last_post" in FEATURE_COLS_V2
 
     def test_audience_segment_score_replaced_by_booleans(self):
         assert "audience_segment_score" not in FEATURE_COLS_V2
