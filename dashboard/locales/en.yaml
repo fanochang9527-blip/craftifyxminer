@@ -47,8 +47,8 @@ candidates:
   only_sellable_help: "When enabled, only creators with is_sellable=true are shown."
   sort_mode: "Sort Mode"
   sort:
-    legacy_sps: "Legacy: SPS only"
-    dual_model: "Dual model: sellability then predicted sales"
+    legacy_sps: "Legacy: Sellability only"
+    dual_model: "Dual model: sellability weighted"
   creator_type: "Creator Type"
   strategy: "Discovery Strategy"
   bd_status: "BD Status"

@@ -47,8 +47,8 @@ candidates:
   only_sellable_help: "开启后仅显示 is_sellable=true 的候选人"
   sort_mode: "排序模式"
   sort:
-    legacy_sps: "旧版：仅按 SPS 排序"
-    dual_model: "双模型：先可卖货，再预测销量"
+    legacy_sps: "旧版：仅按可卖货分排序"
+    dual_model: "双模型：先可卖货，再按可卖货分加权排序"
   creator_type: "创作者类型"
   strategy: "发现策略"
   bd_status: "BD 状态"

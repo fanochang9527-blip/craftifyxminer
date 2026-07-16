@@ -247,11 +247,16 @@ def _render_candidates_table() -> None:
         current_user_id=current_user_id,
     )
 
-    order_sql = (
-        "cs.sps_score DESC"
-        if sort_mode == "legacy_sps"
-        else f"CASE WHEN COALESCE(cs.is_sellable, false) THEN COALESCE(cs.sps_score, 0) ELSE COALESCE(cs.sps_score, 0) * {NON_SELLABLE_SPS_WEIGHT} END DESC, COALESCE(cs.predicted_sales, 0) DESC, cs.sps_score DESC"
-    )
+    # 排序以 sellability_score 为主，避免 BD 标记决策后 SPS 分重算/抖动导致行"消失"。
+    # 二级键固定为 c.id 保证结果稳定，防止同分记录因分页/分配而跳动。
+    if sort_mode == "legacy_sps":
+        order_sql = "cs.sellability_score DESC NULLS LAST, c.id"
+    else:
+        weighted_sellability = (
+            f"CASE WHEN COALESCE(cs.is_sellable, false) THEN COALESCE(cs.sellability_score, 0) "
+            f"ELSE COALESCE(cs.sellability_score, 0) * {NON_SELLABLE_SPS_WEIGHT} END"
+        )
+        order_sql = f"{weighted_sellability} DESC, c.id"
 
     if is_admin:
         count_query = f"""
