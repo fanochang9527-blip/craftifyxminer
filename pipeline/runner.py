@@ -214,7 +214,7 @@ def run_full_pipeline(
         recall = sell_result.get("recall", "N/A")
         p250 = sps_result.get("precision_at_250", "N/A")
         st.result_line = f"recall={recall}, P@250={p250}"
-        summary["evaluation"] = eval_results
+        summary["evaluation"] = {"sellability": sell_result, "sps": sps_result}
     if st.failed:
         summary["errors"].append(("evaluation", st.result_line))
 
@@ -267,10 +267,12 @@ def run_full_pipeline(
     print(f" Backfill scores:     {backfill_data.get('scores_updated', 0)} updated")
     print(f" Scores computed:     {summary['scores']}")
     eval_data = summary.get("evaluation", {})
-    if eval_data and not eval_data.get("error"):
-        print(f" Model eval:          recall={eval_data.get('recall')}, "
-              f"P@250={eval_data.get('precision_at_250')}, "
-              f"F2={eval_data.get('f2_score')}")
+    sell_result = eval_data.get("sellability", {}) if isinstance(eval_data, dict) else {}
+    sps_result = eval_data.get("sps", {}) if isinstance(eval_data, dict) else {}
+    if eval_data and not (sell_result.get("error") or sps_result.get("error")):
+        print(f" Model eval:          recall={sell_result.get('recall')}, "
+              f"P@250={sps_result.get('precision_at_250')}, "
+              f"F2={sell_result.get('f2_score')}")
     sell_train = summary.get("sellability_training", {})
     if sell_train and not sell_train.get("error"):
         print(f" Sellability training: {sell_train.get('model_type')} ({sell_train.get('n_samples')} samples)")
