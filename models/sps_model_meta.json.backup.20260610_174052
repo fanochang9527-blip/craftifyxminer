@@ -1,0 +1,25 @@
+{
+  "model_type": "XGBoost",
+  "n_samples": 53,
+  "n_features": 15,
+  "feature_names": [
+    "audience_score",
+    "engagement_score",
+    "virality_score",
+    "posting_score",
+    "monetization_score",
+    "growth_score",
+    "character_consistency",
+    "community_score",
+    "audience_segment_score",
+    "type_oc_creator",
+    "type_vtuber",
+    "type_fan_artist",
+    "type_game_creator",
+    "type_content_creator",
+    "type_unknown"
+  ],
+  "target": "total_sales_log1p",
+  "sps_sales_normalizer": 100.0,
+  "trained_at": "2026-05-22T08:27:22.330046"
+}

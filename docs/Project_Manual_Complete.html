@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>项目说明书_汇总</title>
+<style>
+@page { size: A4; margin: 2cm 1.8cm; }
+* { box-sizing: border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC",
+                 "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.75;
+    color: #333;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2em;
+}
+h1 {
+    font-size: 22pt;
+    color: #1a1a1a;
+    border-bottom: 2.5px solid #2c3e50;
+    padding-bottom: 0.3em;
+    margin-top: 0;
+    page-break-after: avoid;
+}
+h2 {
+    font-size: 15pt;
+    color: #222;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 0.25em;
+    margin-top: 1.8em;
+    page-break-after: avoid;
+}
+h3 {
+    font-size: 12.5pt;
+    color: #333;
+    margin-top: 1.5em;
+    page-break-after: avoid;
+}
+h4 {
+    font-size: 11pt;
+    color: #444;
+    margin-top: 1.2em;
+}
+table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1.2em 0;
+    font-size: 9.5pt;
+    page-break-inside: avoid;
+}
+th, td {
+    border: 1px solid #ccc;
+    padding: 7px 10px;
+    text-align: left;
+    vertical-align: top;
+}
+th {
+    background: #f0f2f5;
+    font-weight: 600;
+    color: #1a1a1a;
+}
+tr:nth-child(even) { background: #fafbfc; }
+code {
+    background: #f4f4f5;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: "SF Mono", "Consolas", "Monaco", monospace;
+    font-size: 9pt;
+    color: #c7254e;
+}
+pre {
+    background: #f8f9fa;
+    padding: 12px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-size: 9pt;
+    line-height: 1.5;
+    border: 1px solid #e8e8e8;
+    page-break-inside: avoid;
+}
+pre code {
+    background: none;
+    padding: 0;
+    color: #333;
+}
+blockquote {
+    border-left: 4px solid #2c3e50;
+    margin: 1.2em 0;
+    padding: 0.6em 1.2em;
+    color: #555;
+    background: #f8f9fa;
+    border-radius: 0 4px 4px 0;
+}
+ul, ol {
+    margin: 0.6em 0;
+    padding-left: 2em;
+}
+li {
+    margin: 0.35em 0;
+}
+a {
+    color: #0366d6;
+    text-decoration: none;
+}
+hr {
+    border: none;
+    border-top: 1px solid #e1e4e8;
+    margin: 2em 0;
+}
+@media print {
+    body { padding: 0; }
+    h1, h2, h3 { page-break-after: avoid; }
+    table, pre, blockquote { page-break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+<h1 id="craftifyx-miner-70">CraftifyX Miner 7.0 — 项目综合说明书</h1>
+<blockquote>
+<p><strong>生成时间</strong>: 2026-05-29
+<strong>版本</strong>: v7.0（基于 6.0 架构迭代）
+<strong>文档来源</strong>: 汇总 <code>README.md</code>、<code>CraftifyX-Miner-7.0-项目说明书.md</code>、<code>CraftifyX业务介绍.md</code>、<code>发现者爬取与过滤流程.md</code>、<code>LOCAL_DEVELOPMENT.md</code>、<code>OPERATIONS.md</code>、<code>db/schema.sql</code> 等核心文档</p>
+</blockquote>
+<hr />
+<h2 id="_1">目录</h2>
+<ol>
+<li><a href="#一业务背景">业务背景</a></li>
+<li><a href="#二系统定位">系统定位</a></li>
+<li><a href="#三核心指标">核心指标</a></li>
+<li><a href="#四系统架构">系统架构</a></li>
+<li><a href="#五数据流程详解">数据流程详解</a></li>
+<li><a href="#六核心能力">核心能力</a></li>
+<li><a href="#七项目结构">项目结构</a></li>
+<li><a href="#八数据库设计">数据库设计</a></li>
+<li><a href="#九部署与运维">部署与运维</a></li>
+<li><a href="#十本地开发">本地开发</a></li>
+<li><a href="#十一成本与roi">成本与ROI</a></li>
+<li><a href="#十二风险与应对">风险与应对</a></li>
+<li><a href="#附录名词解释">附录：名词解释</a></li>
+</ol>
+<hr />
+<h2 id="_2">一、业务背景</h2>
+<p><strong>CraftifyX</strong> 是面向全球的 <strong>「预售验证 + 现货放量」双轮</strong> 模式平台，将 VTuber、游戏角色、原创 OC 等虚拟 IP 变为收藏级实体商品，使中长尾创作者在<strong>零垫资、低库存风险</strong>下完成 IP 变现。</p>
+<h3 id="_3">关键运营数据</h3>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>创作者池</td>
+<td>已合作产生销售约 <strong>150</strong>；签约待上线约 <strong>170</strong>；2026 年目标合作 <strong>420+</strong></td>
+</tr>
+<tr>
+<td>近期业绩</td>
+<td>近 <strong>3 个月</strong>净预售约 <strong>77 万 RMB</strong>（不含邮费），主要来自海外 VTuber/OC/游戏工作室</td>
+</tr>
+<tr>
+<td>复购</td>
+<td><strong>90 天</strong>复购率近 <strong>10%</strong>；目标通过社群提升至 <strong>20%+</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="_4">商业模式：验矿 → 采矿</h3>
+<ul>
+<li><strong>验矿（筛选与预售验证）</strong>：Miner 自动抓取 X/TikTok/Twitch/Discord 等信号，<strong>50 件成团</strong>，未成团全额退款；创作者分成短期 <strong>25%</strong>、规模化后 <strong>20%</strong></li>
+<li><strong>采矿（现货放量）</strong>：仅将预售数据好的款转现货；现货 SKU 上限约为预售 SKU 的 <strong>20%</strong></li>
+</ul>
+<hr />
+<h2 id="_5">二、系统定位</h2>
+<p><strong>CraftifyX Miner 7.0</strong> 是一套端到端的「创作者发现 + 评分分层 + BD 决策 + 数据驱动进化」系统：</p>
+<blockquote>
+<p>帮助 CraftifyX <strong>每天产出约 300–500 名带 SPS 评分的海外创作者候选人</strong>，让 BD 专注「判断」与「联系」；系统通过 <strong>BD 反馈 + 销售数据</strong> 双轨进化。</p>
+</blockquote>
+<p><strong>一句话定位</strong>：一套<strong>每月约 500 美元以内</strong>、<strong>4 周可交付 MVP</strong>、<strong>越用越准</strong>的 AI 自动化系统。</p>
+<h3 id="_6">解决什么痛点</h3>
+<ul>
+<li>BD 手动在 X 上找人，效率低、易疲劳、难量化</li>
+<li>仅靠关键词搜「Artist」<strong>漏掉大量真实创作者</strong>（链接店铺、极简 BIO）</li>
+<li>评分与「是否值得联系」缺乏统一数据语言</li>
+<li><strong>6.0 已解决「自动化发现 + 粗筛」</strong>；<strong>7.0 强化「少误杀、圈层可解释、可持续进化」</strong></li>
+</ul>
+<hr />
+<h2 id="_7">三、核心指标</h2>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>数值</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>日终局产出（深度 + 评分）</strong></td>
+<td><strong>300–500 名创作者</strong></td>
+<td>L3 深度抓取 + 10 维 + SPS 后的 BD 可见候选人规模</td>
+</tr>
+<tr>
+<td><strong>L1 日扫描量</strong></td>
+<td>约 <strong>5,000</strong> 人级</td>
+<td>Following 浅扫（量级随锚点数配置变化）</td>
+</tr>
+<tr>
+<td><strong>L2 AI 过滤后</strong></td>
+<td>约 <strong>500–800</strong> 人/日</td>
+<td>规则快筛 + LLM 后的中间池</td>
+</tr>
+<tr>
+<td><strong>月发现量（去重后）</strong></td>
+<td>约 <strong>10,000–15,000</strong></td>
+<td>覆盖 VTuber / OC / 游戏开发者等；含随机探索</td>
+</tr>
+<tr>
+<td><strong>月度总成本</strong></td>
+<td><strong>≤$500</strong>（约 ¥3,500）</td>
+<td>Apify + 国产大模型 + 服务器 + 数据库等</td>
+</tr>
+<tr>
+<td><strong>交付周期（MVP）</strong></td>
+<td><strong>4 周</strong></td>
+<td>数据管道 → BIO → 评分 → Dashboard 上线</td>
+</tr>
+<tr>
+<td><strong>预计 BD 审核量</strong></td>
+<td>~450 人/月</td>
+<td>系统按 Hub/Connector、SPS 等排序后的高优池</td>
+</tr>
+<tr>
+<td><strong>BIO 目标</strong></td>
+<td>综合准确率 <strong>&gt;90%</strong>；误杀率持续压降</td>
+<td>依赖规则 + LLM + 可选复盘库</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_8">四、系统架构</h2>
+<pre><code>三级智能管道:
+
+L1 浅层扫描 (Datacenter Proxy)
+  → Seed 库 (80% 高价值 + 20% 随机探索)
+  → Apify Following 扫描 (~5000 人/日)
+
+L2 AI 预过滤 (国产大模型)
+  → Level 1/2 规则快筛 (Link DNA + 语义矩阵 + Emoji 信号)
+  → Level 3 LLM 语义兜底 (Qwen/Kimi/DeepSeek, 仅处理 ~30% 灰区)
+  → 产出 500-800 候选人/日
+
+L3 深度抓取 (Residential Proxy)
+  → Profile + 10 Tweets
+  → 10 维指标计算 → SPS 评分 + 中心度分层
+  → 产出 300-500 带评分的候选人/日
+
+应用层
+  → Streamlit BD Dashboard (4 页面)
+  → BD 判定 (Interested / Rejected / Deferred)
+  → Sales Feedback → Seed 自动晋升 (飞轮进化)
+</code></pre>
+<h3 id="_9">四层架构 + 双轨进化</h3>
+<table>
+<thead>
+<tr>
+<th>层级</th>
+<th>名称</th>
+<th>要点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>输入层</td>
+<td>多源发现引擎</td>
+<td>种子导入（100+ 销售验证创作者）、每日 Multi-hop（Layer-1/2 + 反向）、动态锚点 <strong>60% 利用 + 40% 探索</strong></td>
+</tr>
+<tr>
+<td>处理层</td>
+<td>智能计算引擎</td>
+<td>Apify <strong>4 类</strong>采集、<strong>10 维指标</strong>、轻量中心度（Hub/Connector/Peripheral）、<strong>SPS</strong> + <strong>Contact Probability</strong></td>
+</tr>
+<tr>
+<td>应用层</td>
+<td>BD 决策引擎</td>
+<td>分级候选池（Hub 优先 + SPS 排序）、BD Dashboard、联系执行与结果追踪</td>
+</tr>
+<tr>
+<td>进化层</td>
+<td>双轨飞轮</td>
+<td>Track1：BD 反馈优化联系模型；Track2：Sales/GMV 驱动 XGBoost 权重；新 Seed 晋升</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_10">五、数据流程详解</h2>
+<p>发现链路在 <code>pipeline/runner.py</code> 的 <code>run_full_pipeline()</code> 中按顺序执行：</p>
+<pre><code>1. 生成当日锚点
+   → 2. L1：Following 浅层爬取（Apify）
+      → 3. 入库
+         → 4. 规则 + AI 过滤
+            → 5. 发现来源打标
+               → 6. 深度抓取（推文+画像）
+                  → 7. 特征计算
+                     → 8. SPS 评分
+</code></pre>
+<h3 id="51">5.1 每日锚点生成</h3>
+<p><strong>配置</strong>：<code>DAILY_ANCHOR_COUNT=20</code>，<code>EXPLORATION_RATIO=0.20</code></p>
+<table>
+<thead>
+<tr>
+<th>锚点类型</th>
+<th>比例</th>
+<th>规则</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>常规锚点</strong></td>
+<td>80%</td>
+<td>从 <code>is_seed = true</code> 且 <code>seed_tier IN ('S', 'A')</code> 中选取；不足补 <code>B</code> 级</td>
+</tr>
+<tr>
+<td><strong>探索锚点</strong></td>
+<td>20%</td>
+<td>轮询 <code>geo_explore</code> → <code>hashtag_explore</code> → <code>time_explore</code></td>
+</tr>
+</tbody>
+</table>
+<p>探索标签示例：<code>#絵描きさんと繋がりたい</code>、<code>#VTuber</code>、<code>#indiegame</code>、<code>#ArtistOnTwitter</code></p>
+<h3 id="52-l1-following">5.2 L1 Following 爬取</h3>
+<ul>
+<li><strong>预算门禁</strong>：当日 <code>apify_cost_usd ≥ DAILY_APIFY_BUDGET_USD</code>（默认 $20）则不启动</li>
+<li><strong>Actor</strong>：<code>apidojo/twitter-user-scraper</code>，<code>getFollowing: true</code></li>
+<li><strong>每条锚点最多拉取</strong>：<code>MAX_FOLLOWING_PER_ANCHOR</code>（默认 500）</li>
+<li><strong>以 <code>#</code> 开头的探索锚点不会进入 Following 请求</strong></li>
+</ul>
+<h3 id="53">5.3 入库规则</h3>
+<ul>
+<li><code>INSERT ... ON CONFLICT (platform, platform_account_id) DO UPDATE</code></li>
+<li><code>bio</code> / <code>website</code>：<strong>仅当新值非空</strong> 才覆盖</li>
+<li><code>followers</code> / <code>following</code> / <code>tweets_count</code>：用新值覆盖</li>
+<li>新插入行默认 <code>bd_status = 'pending'</code></li>
+</ul>
+<h3 id="54">5.4 过滤管道（三级）</h3>
+<p><strong>仅处理 <code>bd_status = 'pending'</code> 且 <code>bio</code> 非空的用户。</strong></p>
+<table>
+<thead>
+<tr>
+<th>级别</th>
+<th>名称</th>
+<th>判定逻辑</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Level 1</strong></td>
+<td>硬规则 / Link DNA</td>
+<td>作品集与店铺链接命中 → <code>rule_passed</code>（高置信，可跳过 LLM）</td>
+</tr>
+<tr>
+<td><strong>Level 2</strong></td>
+<td>语义矩阵</td>
+<td>身份词、动作+工具词组合、Emoji 信号命中 → <code>rule_passed</code>；误杀防范命中 → <code>rule_rejected</code></td>
+</tr>
+<tr>
+<td><strong>Level 3</strong></td>
+<td>LLM 兜底</td>
+<td>灰区 BIO 批量调用国产大模型；YES → <code>ai_passed</code>，NO → <code>ai_rejected</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>类型分类</strong>：按 <code>bio_rules.yaml</code> 的 <code>type_classification</code> 首条匹配；否则默认 <code>content_creator</code>。</p>
+<h3 id="55">5.5 深度抓取</h3>
+<ul>
+<li><strong>入选条件</strong>：<code>bd_status IN ('rule_passed', 'ai_passed')</code> 且<strong>尚无 tweets 记录</strong></li>
+<li><strong>批量大小</strong>：<code>DEEP_SCRAPE_BATCH_SIZE</code>（默认 50）</li>
+<li><strong>Actor</strong>：<code>apidojo/tweet-scraper</code>（Residential Proxy）</li>
+<li>回写 <code>creators</code> + <code>tweets</code>，更新 <code>discovery_batches.after_deep_scrape</code></li>
+</ul>
+<h3 id="56-sps">5.6 特征与 SPS</h3>
+<ul>
+<li><strong>特征</strong>：对所有<strong>已有推文、尚无 <code>creator_features</code></strong> 的创作者计算 10 维特征</li>
+<li><strong>SPS</strong>：对所有<strong>已有特征、尚无 <code>creator_scores</code></strong> 的创作者打分</li>
+</ul>
+<hr />
+<h2 id="_11">六、核心能力</h2>
+<h3 id="1">能力 1：三层发现引擎</h3>
+<ul>
+<li><strong>Layer-1</strong>：常规扩展 — 从动态锚点抓取 Following（约 <strong>60%</strong> 预算）</li>
+<li><strong>Layer-2</strong>：超级连接器 — 被多个 Seed 共同关注的账号再扩展（约 <strong>30%</strong>）</li>
+<li><strong>反向挖掘</strong>：高价值 Seed 的粉丝中筛创作者（约 <strong>10%</strong>）</li>
+<li><strong>随机探索</strong>：预留 <strong>10–20%</strong> 用于跨地域 / 跨品类</li>
+</ul>
+<h3 id="2bio">能力 2：BIO 智能筛选（四级产品叙事）</h3>
+<table>
+<thead>
+<tr>
+<th>级别</th>
+<th>含义</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Level A</strong></td>
+<td>硬规则 / Link DNA</td>
+<td>作品集与店铺链接命中；高置信「创作者」信号</td>
+</tr>
+<tr>
+<td><strong>Level B</strong></td>
+<td>语义矩阵</td>
+<td>身份 / 动作 / 工具词等；与 <code>bio_rules.yaml</code> 一致</td>
+</tr>
+<tr>
+<td><strong>Level C</strong></td>
+<td>LLM</td>
+<td>灰区 BIO、「宁漏勿错」策略；批量 JSON 输出</td>
+</tr>
+<tr>
+<td><strong>Level D</strong></td>
+<td>误杀复盘（可选）</td>
+<td>BD 标记「系统漏掉但高价值」的 BIO；Few-shot / 周更 Prompt</td>
+</tr>
+</tbody>
+</table>
+<h3 id="3">能力 3：数据化评分 + 轻量中心度</h3>
+<p><strong>10 维指标</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>含义</th>
+<th>计算要点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Audience</td>
+<td>规模</td>
+<td><code>log10(followers+1)×20</code></td>
+</tr>
+<tr>
+<td>Engagement</td>
+<td>粘性</td>
+<td><code>(赞+转×2+评×3)/followers×100</code></td>
+</tr>
+<tr>
+<td>Virality</td>
+<td>爆款</td>
+<td>top3 均值 / 月均值，&gt;5x → 100</td>
+</tr>
+<tr>
+<td>Posting</td>
+<td>勤勉</td>
+<td>月发帖数/30×100</td>
+</tr>
+<tr>
+<td>Monetization</td>
+<td>变现</td>
+<td>Bio 关键词：商店 90 / 接单 60 / 无 0</td>
+</tr>
+<tr>
+<td>Growth</td>
+<td>增速</td>
+<td>月环比粉丝增长</td>
+</tr>
+<tr>
+<td>Audience Segment</td>
+<td>受众细分</td>
+<td>Bio / Website / Username 语义分类</td>
+</tr>
+<tr>
+<td>Character Consistency</td>
+<td>IP 化</td>
+<td>pHash 最大聚类/总图片×100</td>
+</tr>
+<tr>
+<td>Community</td>
+<td>社区</td>
+<td><code>(mentions×2+fanart×5)</code> 标准化</td>
+</tr>
+<tr>
+<td>Community Score</td>
+<td>社群</td>
+<td>互动密度标准化</td>
+</tr>
+</tbody>
+</table>
+<p><strong>中心度分层</strong>（基于被 Seed 关注数）：</p>
+<ul>
+<li><strong>Hub</strong>：被 <strong>≥5</strong> 个 Seed 关注 — BD 最优先</li>
+<li><strong>Connector</strong>：<strong>2–4</strong> 个 — 次级优先</li>
+<li><strong>Peripheral</strong>：<strong>0–1</strong> 个 — 依赖 SPS</li>
+</ul>
+<h3 id="4">能力 4：双轨进化</h3>
+<ul>
+<li><strong>Track 1</strong>：BD 触达与回复结果 → 优化排序与 <strong>Contact Probability</strong></li>
+<li><strong>Track 2</strong>：<code>sales_feedback</code>（GMV 等）→ <strong>SPS 权重校准</strong>、<strong>高 GMV 晋升 Seed</strong>（如 GMV &gt; $1000）</li>
+</ul>
+<h3 id="5bd">能力 5：BD 工作台</h3>
+<ul>
+<li>日报、候选人卡片（<strong>10 维雷达 + 中心度 + SPS</strong>）</li>
+<li>Interested / Rejected / Deferred</li>
+<li>联系与销售录入、成本面板</li>
+<li>可选「标记误杀」入口</li>
+</ul>
+<hr />
+<h2 id="_12">七、项目结构</h2>
+<pre><code>craftifyxminer/
+├── config/                     # 配置文件
+│   ├── settings.py             # 环境变量与全局配置
+│   ├── apify_config.yaml       # Apify Actor 参数
+│   ├── weights.yaml            # 5 类创作者 SPS 权重矩阵
+│   └── bio_rules.yaml          # BIO 知识库
+├── auth/                       # 认证与权限 (bcrypt / JWT / Session)
+├── db/                         # 数据库 (连接池 / schema / 索引 / 迁移)
+├── server/                     # Flask 后端 (Webhook / API / 健康检查)
+├── pipeline/                   # 数据管道
+│   ├── seed_import.py          # 种子导入
+│   ├── discovery.py            # 每日发现引擎
+│   ├── bio_rule_filter.py      # Level 1/2 规则快筛
+│   ├── ai_filter.py            # Level 3 LLM 批量过滤
+│   ├── deep_scrape.py          # 深度抓取触发
+│   ├── feature_engine.py       # 10 维指标计算
+│   ├── sps_scorer.py           # SPS 评分 + 中心度分层
+│   └── evolution.py            # 飞轮进化
+├── dashboard/                  # Streamlit BD 工作台
+│   ├── pages/
+│   │   ├── 1_daily_report.py   # 每日发现报告
+│   │   ├── 2_candidates.py     # 候选人浏览与 BD 判定
+│   │   ├── 3_outreach.py       # 联系追踪与销售反馈
+│   │   ├── 4_cost_monitor.py   # 成本监控面板
+│   │   └── 5_admin.py          # Admin 管理面板
+│   └── components/
+│       └── radar_chart.py      # 10 维雷达图
+├── nginx/                      # Nginx 反向代理配置
+├── scripts/                    # 运维脚本 (deploy / backup)
+├── cron/                       # APScheduler 定时任务
+├── tests/                      # pytest 用例
+├── docs/                       # 项目文档
+├── .env.example                # 环境变量模板
+├── requirements.txt            # Python 依赖
+├── Dockerfile                  # 非 root 用户镜像
+├── docker-compose.yml          # 本地开发
+└── docker-compose.prod.yml     # 生产部署
+</code></pre>
+<hr />
+<h2 id="_13">八、数据库设计</h2>
+<h3 id="_14">核心表结构</h3>
+<table>
+<thead>
+<tr>
+<th>表名</th>
+<th>用途</th>
+<th>关键字段</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>creators</code></td>
+<td>创作者主档案</td>
+<td><code>username</code>, <code>bio</code>, <code>followers</code>, <code>bd_status</code>, <code>is_seed</code>, <code>creator_type_auto</code>, <code>discovered_date</code></td>
+</tr>
+<tr>
+<td><code>tweets</code></td>
+<td>推文数据</td>
+<td><code>tweet_id</code>, <code>creator_id</code>, <code>likes</code>, <code>retweets</code>, <code>replies</code>, <code>views</code>, <code>text</code>, <code>media_urls</code></td>
+</tr>
+<tr>
+<td><code>creator_features</code></td>
+<td>8 维特征指标</td>
+<td><code>audience_score</code>, <code>engagement_score</code>, <code>virality_score</code>, <code>growth_score</code>, <code>posting_score</code>, <code>monetization_score</code>, <code>character_consistency</code>, <code>community_score</code>, <code>audience_segment_score</code></td>
+</tr>
+<tr>
+<td><code>creator_graph</code></td>
+<td>关系图谱</td>
+<td><code>creator_id</code>, <code>connected_creator_id</code>, <code>connection_type</code></td>
+</tr>
+<tr>
+<td><code>creator_scores</code></td>
+<td>SPS 评分 + 中心度</td>
+<td><code>sps_score</code>, <code>sellability_score</code>, <code>is_sellable</code>, <code>centrality_tier</code>, <code>seed_connections</code>, <code>contact_probability</code></td>
+</tr>
+<tr>
+<td><code>sales_feedback</code></td>
+<td>销售反馈（进化核心）</td>
+<td><code>gmv</code>, <code>units_sold</code>, <code>launch_date</code>, <code>conversion_rate</code></td>
+</tr>
+<tr>
+<td><code>outreach_log</code></td>
+<td>BD 联系追踪</td>
+<td><code>contact_channel</code>, <code>response_received</code>, <code>deal_status</code></td>
+</tr>
+<tr>
+<td><code>cost_tracking</code></td>
+<td>成本监控</td>
+<td><code>apify_cost_usd</code>, <code>llm_cost_usd</code>, <code>proxy_cost_usd</code>, <code>total_cost_usd</code></td>
+</tr>
+<tr>
+<td><code>discovery_batches</code></td>
+<td>发现批次追踪</td>
+<td><code>batch_date</code>, <code>anchor_seeds</code>, <code>raw_discovered</code>, <code>after_ai_filter</code>, <code>after_deep_scrape</code></td>
+</tr>
+<tr>
+<td><code>users</code></td>
+<td>登录与权限</td>
+<td><code>username</code>, <code>role</code>, <code>is_active</code></td>
+</tr>
+<tr>
+<td><code>login_attempts</code></td>
+<td>登录审计</td>
+<td><code>ip_address</code>, <code>success</code>, <code>attempted_at</code></td>
+</tr>
+<tr>
+<td><code>model_evaluations</code></td>
+<td>模型评估</td>
+<td><code>recall</code>, <code>precision_score</code>, <code>f2_score</code>, <code>spearman_corr</code></td>
+</tr>
+<tr>
+<td><code>bd_decisions</code></td>
+<td>BD 多用户决策</td>
+<td><code>decision</code>, <code>note</code>, <code>creator_id</code>, <code>user_id</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="_15">规模预估</h3>
+<ul>
+<li><code>creators</code>: ~5 万</li>
+<li><code>tweets</code>: ~250 万</li>
+<li><code>creator_graph</code>: ~50 万边</li>
+<li><code>sales_feedback</code>: ~1000/年</li>
+</ul>
+<hr />
+<h2 id="_16">九、部署与运维</h2>
+<h3 id="91">9.1 生产架构</h3>
+<pre><code>┌─────────┐     ┌──────────────┐     ┌──────────────┐
+│  nginx   │────&gt;│  server      │     │  dashboard   │
+│  :80     │     │  (gunicorn)  │     │  (streamlit) │
+└─────────┘     │  :5000       │     │  :8501       │
+                └──────────────┘     └──────────────┘
+                        │                    │
+                        └────────┬───────────┘
+                                 │
+                        ┌────────▼────────┐
+                        │   PostgreSQL     │
+                        │   (阿里云 RDS)   │
+                        └─────────────────┘
+                                 │
+                        ┌────────▼────────┐
+                        │      cron       │
+                        │  (APScheduler)  │
+                        └─────────────────┘
+</code></pre>
+<h3 id="92">9.2 定时任务</h3>
+<table>
+<thead>
+<tr>
+<th>时间 (Asia/Shanghai)</th>
+<th>Job ID</th>
+<th>执行内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>08:00</strong></td>
+<td><code>daily_pipeline</code></td>
+<td>全链路：锚点 → L1 扫描 → 深度抓取 → 特征 → SPS</td>
+</tr>
+<tr>
+<td><strong>23:00</strong></td>
+<td><code>daily_summary</code></td>
+<td>日报统计 + 成本核算 + 种子晋升</td>
+</tr>
+</tbody>
+</table>
+<h3 id="93">9.3 一键部署</h3>
+<pre><code class="language-bash">sudo bash scripts/deploy.sh
+</code></pre>
+<p>自动完成：安装 Docker、配置 <code>.env</code>、初始化数据库、创建 Admin、启动 Nginx + Flask + Streamlit + Cron、配置每日备份。</p>
+<h3 id="94">9.4 常用运维命令</h3>
+<pre><code class="language-bash"># 查看容器状态
+docker compose -f docker-compose.prod.yml ps
+
+# 查看日志
+docker compose -f docker-compose.prod.yml logs -f
+
+# 手动备份
+bash scripts/backup_db.sh
+
+# 用户管理
+docker compose -f docker-compose.prod.yml run --rm server python -m auth.manage create-user --username bd1
+</code></pre>
+<h3 id="95">9.5 常见排障</h3>
+<table>
+<thead>
+<tr>
+<th>症状</th>
+<th>排查</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>LLM 反复重试 / 401</td>
+<td><code>git pull &amp;&amp; docker compose up -d --build</code>；检查 <code>.env</code> 中各 <code>*_API_KEY</code></td>
+</tr>
+<tr>
+<td>JSON 解析失败</td>
+<td><code>.env</code> 中设 <code>LLM_MAX_TOKENS=16384</code></td>
+</tr>
+<tr>
+<td><code>.env</code> 改了没生效</td>
+<td><code>docker compose up -d --force-recreate</code>（restart 不会重读 <code>.env</code>）</td>
+</tr>
+<tr>
+<td>Apify 预算用完</td>
+<td>当日不再触发；次日自动恢复；或临时提额 <code>DAILY_APIFY_BUDGET_USD</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_17">十、本地开发</h2>
+<h3 id="101">10.1 环境要求</h3>
+<ul>
+<li>Python 3.11+</li>
+<li>PostgreSQL 18+（或使用 Docker）</li>
+<li>Apify 账号 + 国产大模型 API Key</li>
+</ul>
+<h3 id="102">10.2 快速启动</h3>
+<pre><code class="language-bash"># 1. 配置环境
+cp .env.example .env
+
+# 2. 安装依赖
+python -m venv venv &amp;&amp; source venv/bin/activate
+pip install -r requirements.txt
+
+# 3. 启动数据库
+docker compose up -d db
+
+# 4. 跑测试
+pytest tests/ -v
+
+# 5. 启动服务
+python -m server.app              # Flask :5000
+streamlit run dashboard/app.py    # Dashboard :8501
+</code></pre>
+<h3 id="103">10.3 种子导入</h3>
+<pre><code class="language-bash">python -m pipeline.seed_import --csv data/sample_seeds.csv
+</code></pre>
+<p>Tier 规则：<code>S</code> &gt; 2000，<code>A</code> &gt; 500，<code>B</code> &gt; 100，其余为 <code>C</code>。</p>
+<h3 id="104-sps">10.4 批量补算特征与 SPS</h3>
+<pre><code class="language-bash">python scripts/backfill_features_sps.py --max-rounds 5
+</code></pre>
+<hr />
+<h2 id="roi">十一、成本与 ROI</h2>
+<h3 id="_18">月度成本预算</h3>
+<table>
+<thead>
+<tr>
+<th>费用项</th>
+<th>预算</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Apify 订阅 + 代理</td>
+<td>~$380</td>
+</tr>
+<tr>
+<td>国产大模型 API</td>
+<td>~$2–20</td>
+</tr>
+<tr>
+<td>云服务器 (阿里云 2C4G)</td>
+<td>~$3–15</td>
+</tr>
+<tr>
+<td>数据库</td>
+<td>~$0–8</td>
+</tr>
+<tr>
+<td>缓冲</td>
+<td>~$90–110</td>
+</tr>
+<tr>
+<td><strong>合计</strong></td>
+<td><strong>≤$500/月</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="roi_1">产出与 ROI（文档口径）</h3>
+<ul>
+<li><strong>月发现量</strong>：约 <strong>15,000</strong>（500 人/日 × 30）</li>
+<li><strong>预计成交</strong>：<strong>15–30</strong> 人（10–20% 转化假设）</li>
+<li><strong>月度 GMV 增量</strong>：<strong>$75K–$150K</strong></li>
+<li><strong>系统成本占 GMV</strong>：约 <strong>0.5%</strong></li>
+</ul>
+<h3 id="_19">技术选型</h3>
+<table>
+<thead>
+<tr>
+<th>组件</th>
+<th>技术选型</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>后端</td>
+<td>Python (Flask)</td>
+</tr>
+<tr>
+<td>数据采集</td>
+<td>Apify (Twitter/X Actor)</td>
+</tr>
+<tr>
+<td>AI 过滤</td>
+<td>国产大模型 (Qwen / Kimi / DeepSeek，OpenAI 兼容接口)</td>
+</tr>
+<tr>
+<td>数据库</td>
+<td>PostgreSQL 18+</td>
+</tr>
+<tr>
+<td>Dashboard</td>
+<td>Streamlit + Plotly</td>
+</tr>
+<tr>
+<td>定时任务</td>
+<td>APScheduler</td>
+</tr>
+<tr>
+<td>部署</td>
+<td>Docker Compose + Nginx</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_20">十二、风险与应对</h2>
+<table>
+<thead>
+<tr>
+<th>风险</th>
+<th>应对</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Apify 限流 / 成本波动</td>
+<td>分层代理、日预算上限、队列削峰</td>
+</tr>
+<tr>
+<td>BIO 漏判</td>
+<td>规则库迭代 + LLM Prompt + 可选误杀库</td>
+</tr>
+<tr>
+<td>圈层数据稀疏</td>
+<td>新候选人 <code>seed_connections=0</code> 为常态，依赖 SPS 与其它维；随图扩大逐步显现</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_21">附录：名词解释</h2>
+<table>
+<thead>
+<tr>
+<th>术语</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Seed</strong></td>
+<td>已验证或高潜创作者；系统从其关系网扩展发现</td>
+</tr>
+<tr>
+<td><strong>SPS</strong></td>
+<td>Seed Potential Score，10 维加权综合分（0–100）</td>
+</tr>
+<tr>
+<td><strong>Sellability</strong></td>
+<td>可销售性评分（0–100），独立模型判断「是否建议联系」</td>
+</tr>
+<tr>
+<td><strong>Hub / Connector / Peripheral</strong></td>
+<td>被 Seed 关注数分层；Hub ≥5, Connector 2–4, Peripheral 0–1</td>
+</tr>
+<tr>
+<td><strong>passed</strong></td>
+<td><code>bd_status IN ('rule_passed', 'ai_passed')</code>，即通过过滤的候选人</td>
+</tr>
+<tr>
+<td><strong>三级管道</strong></td>
+<td>L1 浅扫 → L2 BIO 过滤 → L3 深度抓取</td>
+</tr>
+<tr>
+<td><strong>四级叙事</strong></td>
+<td>Level A 硬规则 → Level B 语义矩阵 → Level C LLM → Level D 误杀复盘</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><em>本文档由项目核心文档汇总生成。若与代码不一致，以仓库 <code>db/schema.sql</code>、<code>config/</code> 及实际代码为准。</em></p>
+</body>
+</html>

@@ -1,0 +1,8 @@
+{
+  "model_type": "LogisticRegression",
+  "n_samples": 70,
+  "n_positive": 52,
+  "n_negative": 18,
+  "trained_at": "2026-05-22T08:27:22.451086",
+  "threshold": 60.0
+}
